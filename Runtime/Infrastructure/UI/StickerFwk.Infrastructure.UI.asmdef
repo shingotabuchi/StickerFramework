@@ -1,0 +1,19 @@
+{
+    "name": "StickerFwk.Infrastructure.UI",
+    "rootNamespace": "StickerFwk.Infrastructure.UI",
+    "references": [
+        "StickerFwk.Core",
+        "VContainer",
+        "UniTask",
+        "MessagePipe"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

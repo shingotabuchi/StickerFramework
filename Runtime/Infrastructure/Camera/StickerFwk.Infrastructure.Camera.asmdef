@@ -1,0 +1,19 @@
+{
+    "name": "StickerFwk.Infrastructure.Camera",
+    "rootNamespace": "StickerFwk.Infrastructure.Camera",
+    "references": [
+        "StickerFwk.Core",
+        "VContainer",
+        "MessagePipe",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

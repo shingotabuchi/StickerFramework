@@ -1,0 +1,23 @@
+{
+    "name": "StickerFwk.Infrastructure",
+    "rootNamespace": "StickerFwk.Infrastructure",
+    "references": [
+        "Unity.Addressables",
+        "Unity.ResourceManager",
+        "Unity.InputSystem",
+        "UniTask",
+        "R3.Unity",
+        "VContainer",
+        "MessagePipe",
+        "StickerFwk.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,16 @@
+{
+    "name": "StickerFwk.Infrastructure.Timeline",
+    "rootNamespace": "StickerFwk.Infrastructure.Timeline",
+    "references": [
+        "Unity.Timeline"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

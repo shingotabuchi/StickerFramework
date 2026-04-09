@@ -1,0 +1,18 @@
+{
+    "name": "StickerFwk.Core.Editor",
+    "rootNamespace": "StickerFwk.Core.Editor",
+    "references": [
+        "StickerFwk.Core"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

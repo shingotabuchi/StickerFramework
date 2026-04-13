@@ -40,20 +40,7 @@ namespace StickerFwk.Core.Editor.InspectorTools
             // Draw standalone buttons
             foreach (var (method, attribute) in standalone)
             {
-                if (attribute.Space > 0)
-                    GUILayout.Space(attribute.Space);
-
-                var label = string.IsNullOrEmpty(attribute.Name)
-                    ? ObjectNames.NicifyVariableName(method.Name)
-                    : attribute.Name;
-
-                if (GUILayout.Button(label))
-                {
-                    foreach (var t in targets)
-                    {
-                        method.Invoke(t, null);
-                    }
-                }
+                DrawButton(method, attribute);
             }
 
             // Draw grouped buttons (horizontal rows)
@@ -62,21 +49,34 @@ namespace StickerFwk.Core.Editor.InspectorTools
                 EditorGUILayout.BeginHorizontal();
                 foreach (var (method, attribute) in group)
                 {
-                    var label = string.IsNullOrEmpty(attribute.Name)
-                        ? ObjectNames.NicifyVariableName(method.Name)
-                        : attribute.Name;
-
-                    if (GUILayout.Button(label))
-                    {
-                        foreach (var t in targets)
-                        {
-                            method.Invoke(t, null);
-                        }
-                    }
+                    DrawButton(method, attribute);
                 }
                 EditorGUILayout.EndHorizontal();
             }
         }
+
+        private void DrawButton(MethodInfo method, ButtonAttribute attribute)
+        {
+            if (attribute.Space > 0)
+                GUILayout.Space(attribute.Space);
+
+            var label = string.IsNullOrEmpty(attribute.Name)
+                ? ObjectNames.NicifyVariableName(method.Name)
+                : attribute.Name;
+
+            bool wasEnabled = GUI.enabled;
+            if (attribute.PlayModeOnly && !EditorApplication.isPlaying)
+                GUI.enabled = false;
+
+            if (GUILayout.Button(label))
+            {
+                foreach (var t in targets)
+                {
+                    method.Invoke(t, null);
+                }
+            }
+
+            GUI.enabled = wasEnabled;
+        }
     }
 }
-

@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
@@ -15,19 +16,20 @@ namespace StickerFwk.Infrastructure.Rendering
         public NoInterpClampedIntParameter downsample = new NoInterpClampedIntParameter(1, 0, 4);
         public RenderPassEventParameter injectionPoint = new RenderPassEventParameter(RenderPassEvent.AfterRenderingTransparents);
         public BoolParameter manualUpdate = new BoolParameter(false, overrideState: true);
+        [HideInInspector] public NoInterpIntParameter cacheVersion = new NoInterpIntParameter(0, overrideState: true);
 
-        private static bool _needsUpdate = true;
+        private int _clearedCacheVersion = -1;
 
-        public bool NeedsUpdate => _needsUpdate;
+        public bool NeedsUpdate => _clearedCacheVersion != cacheVersion.value;
 
         public new void SetDirty()
         {
-            _needsUpdate = true;
+            cacheVersion.Override(cacheVersion.value + 1);
         }
 
         internal void ClearDirty()
         {
-            _needsUpdate = false;
+            _clearedCacheVersion = cacheVersion.value;
         }
 
         public bool IsActive()

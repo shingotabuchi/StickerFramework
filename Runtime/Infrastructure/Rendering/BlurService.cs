@@ -12,6 +12,7 @@ namespace StickerFwk.Infrastructure.Rendering
     public sealed class BlurService : IBlurService, IDisposable
     {
         int _requestCount;
+        int _staticBackgroundRequestCount;
         CancellationTokenSource _cts;
         EaseType _lastEase;
         float _lastDuration;
@@ -63,6 +64,30 @@ namespace StickerFwk.Infrastructure.Rendering
             }
 
             return new BlurHandle(this, offEase, offDuration);
+        }
+
+        public IDisposable RequestStaticBackground()
+        {
+            return RequestStaticBackground(EaseType.Linear, 0f);
+        }
+
+        public IDisposable RequestStaticBackground(EaseType ease, float duration)
+        {
+            return RequestStaticBackground(ease, duration, ease, duration);
+        }
+
+        public IDisposable RequestStaticBackground(EaseType onEase, float onDuration, EaseType offEase, float offDuration)
+        {
+            _staticBackgroundRequestCount++;
+
+            if (_staticBackgroundRequestCount == 1)
+            {
+                SetManualUpdate(true);
+            }
+
+            SetBlurDirty();
+
+            return new StaticBackgroundBlurHandle(this, Request(onEase, onDuration, offEase, offDuration));
         }
 
         void Release(EaseType ease, float duration)
@@ -141,14 +166,29 @@ namespace StickerFwk.Infrastructure.Rendering
             Log.Info($"Blur transition completed enabled={enabled}, ease={ease}, duration={duration}");
         }
 
-        public void SetBlurDirty()
+        void SetBlurDirty()
         {
             _blur?.SetDirty();
         }
 
-        public void SetManualUpdate(bool enabled)
+        void SetManualUpdate(bool enabled)
         {
             _blur?.manualUpdate.Override(enabled);
+        }
+
+        void ReleaseStaticBackground(IDisposable blurHandle)
+        {
+            if (_staticBackgroundRequestCount > 0)
+            {
+                _staticBackgroundRequestCount--;
+            }
+
+            if (_staticBackgroundRequestCount == 0)
+            {
+                SetManualUpdate(false);
+            }
+
+            blurHandle?.Dispose();
         }
 
         public void Dispose()
@@ -181,6 +221,30 @@ namespace StickerFwk.Infrastructure.Rendering
 
                 _owner.Release(_ease, _duration);
                 _owner = null;
+            }
+        }
+
+        sealed class StaticBackgroundBlurHandle : IDisposable
+        {
+            BlurService _owner;
+            IDisposable _blurHandle;
+
+            public StaticBackgroundBlurHandle(BlurService owner, IDisposable blurHandle)
+            {
+                _owner = owner;
+                _blurHandle = blurHandle;
+            }
+
+            public void Dispose()
+            {
+                if (_owner == null)
+                {
+                    return;
+                }
+
+                _owner.ReleaseStaticBackground(_blurHandle);
+                _owner = null;
+                _blurHandle = null;
             }
         }
     }

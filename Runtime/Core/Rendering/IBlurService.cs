@@ -11,7 +11,8 @@ namespace StickerFwk.Core.Rendering
         void Unregister(Volume volume);
         IDisposable Request(EaseType ease, float duration);
         IDisposable Request(EaseType onEase, float onDuration, EaseType offEase, float offDuration);
-        void SetBlurDirty();
-        void SetManualUpdate(bool enabled);
+        IDisposable RequestStaticBackground();
+        IDisposable RequestStaticBackground(EaseType ease, float duration);
+        IDisposable RequestStaticBackground(EaseType onEase, float onDuration, EaseType offEase, float offDuration);
     }
 }

@@ -8,9 +8,57 @@ namespace StickerFwk.Infrastructure.Rendering
     public sealed class DualKawaseBlurPass : ScriptableRenderPass
     {
         private static readonly int OffsetId = Shader.PropertyToID("_Offset");
+        private static readonly string[] DownTextureNames =
+        {
+            "_BlurDown0",
+            "_BlurDown1",
+            "_BlurDown2",
+            "_BlurDown3",
+            "_BlurDown4",
+            "_BlurDown5",
+            "_BlurDown6",
+            "_BlurDown7"
+        };
+
+        private static readonly string[] UpTextureNames =
+        {
+            "_BlurUp0",
+            "_BlurUp1",
+            "_BlurUp2",
+            "_BlurUp3",
+            "_BlurUp4",
+            "_BlurUp5",
+            "_BlurUp6",
+            "_BlurUp7"
+        };
+
+        private static readonly string[] DownPassNames =
+        {
+            "KawaseBlurDown0",
+            "KawaseBlurDown1",
+            "KawaseBlurDown2",
+            "KawaseBlurDown3",
+            "KawaseBlurDown4",
+            "KawaseBlurDown5",
+            "KawaseBlurDown6",
+            "KawaseBlurDown7"
+        };
+
+        private static readonly string[] UpPassNames =
+        {
+            "KawaseBlurUp0",
+            "KawaseBlurUp1",
+            "KawaseBlurUp2",
+            "KawaseBlurUp3",
+            "KawaseBlurUp4",
+            "KawaseBlurUp5",
+            "KawaseBlurUp6",
+            "KawaseBlurUp7"
+        };
 
         private readonly Material _material;
         private readonly int _maxIterations;
+        private readonly TextureHandle[] _downTextures;
 
         private int _iterations;
         private float _offset;
@@ -21,6 +69,7 @@ namespace StickerFwk.Infrastructure.Rendering
         {
             _material = material;
             _maxIterations = maxIterations;
+            _downTextures = new TextureHandle[maxIterations];
         }
 
         public void Setup(float intensity, int iterations, float offset, int downsample, RTHandle cacheTarget = null)
@@ -63,8 +112,6 @@ namespace StickerFwk.Infrastructure.Rendering
             var width = Mathf.Max(1, baseDesc.width >> _downsample);
             var height = Mathf.Max(1, baseDesc.height >> _downsample);
 
-            // Create downsample chain
-            var downTextures = new TextureHandle[_iterations];
             for (var i = 0; i < _iterations; i++)
             {
                 var w = Mathf.Max(1, width >> i);
@@ -72,19 +119,17 @@ namespace StickerFwk.Infrastructure.Rendering
                 var desc = baseDesc;
                 desc.width = w;
                 desc.height = h;
-                desc.name = $"_BlurDown{i}";
-                downTextures[i] = renderGraph.CreateTexture(desc);
+                desc.name = DownTextureNames[i];
+                _downTextures[i] = renderGraph.CreateTexture(desc);
             }
 
-            // Downsample passes
             var lastDown = cameraColor;
             for (var i = 0; i < _iterations; i++)
             {
-                AddBlitPass(renderGraph, lastDown, downTextures[i], _material, 0, $"KawaseBlurDown{i}");
-                lastDown = downTextures[i];
+                AddBlitPass(renderGraph, lastDown, _downTextures[i], _material, 0, DownPassNames[i]);
+                lastDown = _downTextures[i];
             }
 
-            // Create upsample chain and run upsample passes
             var lastUp = lastDown;
             for (var i = _iterations - 2; i >= 0; i--)
             {
@@ -93,14 +138,13 @@ namespace StickerFwk.Infrastructure.Rendering
                 var desc = baseDesc;
                 desc.width = w;
                 desc.height = h;
-                desc.name = $"_BlurUp{i}";
+                desc.name = UpTextureNames[i];
                 var upTexture = renderGraph.CreateTexture(desc);
 
-                AddBlitPass(renderGraph, lastUp, upTexture, _material, 1, $"KawaseBlurUp{i}");
+                AddBlitPass(renderGraph, lastUp, upTexture, _material, 1, UpPassNames[i]);
                 lastUp = upTexture;
             }
 
-            // Final blit back to camera-sized texture
             TextureHandle finalTexture;
             if (_cacheTarget != null)
             {
@@ -131,7 +175,6 @@ namespace StickerFwk.Infrastructure.Rendering
 
                 builder.UseTexture(source);
                 builder.SetRenderAttachment(destination, 0);
-                builder.AllowPassCulling(false);
 
                 builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>
                 {

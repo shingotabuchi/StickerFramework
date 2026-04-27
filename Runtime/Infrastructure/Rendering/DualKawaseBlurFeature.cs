@@ -17,6 +17,7 @@ namespace StickerFwk.Infrastructure.Rendering
         private RTHandle _cachedBlur;
         private int _cachedWidth;
         private int _cachedHeight;
+        private GraphicsFormat _cachedFormat;
         private bool _cacheReady;
 
         public override void Create()
@@ -63,7 +64,8 @@ namespace StickerFwk.Infrastructure.Rendering
             var hasCacheMatch = _cacheReady
                 && _cachedBlur != null
                 && _cachedWidth == desc.width
-                && _cachedHeight == desc.height;
+                && _cachedHeight == desc.height
+                && _cachedFormat == desc.graphicsFormat;
 
             if (isManual && hasCacheMatch)
             {
@@ -92,7 +94,7 @@ namespace StickerFwk.Infrastructure.Rendering
 
         private void EnsureCacheTexture(int width, int height, GraphicsFormat format)
         {
-            if (_cachedBlur != null && _cachedWidth == width && _cachedHeight == height)
+            if (_cachedBlur != null && _cachedWidth == width && _cachedHeight == height && _cachedFormat == format)
             {
                 return;
             }
@@ -104,6 +106,7 @@ namespace StickerFwk.Infrastructure.Rendering
                 name: "_BlurCache");
             _cachedWidth = width;
             _cachedHeight = height;
+            _cachedFormat = format;
         }
 
         protected override void Dispose(bool disposing)

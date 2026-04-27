@@ -21,6 +21,7 @@ StickerFramework is a reusable Unity framework providing DI-driven infrastructur
 ```
 Runtime/
   Core/              <- Interfaces, base classes, event types
+    Presentation/    <- Presenter contracts and base classes
   Infrastructure/    <- Concrete implementations
 ```
 
@@ -60,6 +61,18 @@ Load (Addressables) → OnInitialize(ct) → OnBeforeShow → [Transition In] �
 Views/{WindowTypeName}.prefab          // default
 Views/{WindowTypeName}_{tag}.prefab    // tagged variant
 ```
+
+### Presentation Helpers (`Core/Presentation/`)
+
+Reusable presenter contracts for keeping MonoBehaviour views thin.
+
+**Key types:**
+- `IPresenter<TView>` — Bind/unbind/dispose contract for a presenter bound to one view instance.
+- `Presenter<TView>` — Base implementation that guards null binding, double binding, and use after dispose.
+- `IWindowPresenter<TView>` — Presenter contract with `WindowView` lifecycle hooks.
+- `WindowPresenter<TView>` — Base class for UI window presenters; override only the lifecycle methods needed.
+
+Use presenters for view-specific logic such as MessagePipe/R3 subscriptions, UI text formatting, button-command translation, and window lifecycle side effects. Views should keep serialized Unity references and expose small display/input APIs that presenters call.
 
 ### Input System (`Core/Input/`)
 
@@ -114,7 +127,21 @@ All services are registered in a **RootLifetimeScope** and injected via construc
 
 Features can create **child LifetimeScopes** for scoped dependencies. Pass the child resolver via `WindowOptions.Resolver` so pushed windows get feature-specific injection.
 
-### 2. Event-Driven Communication (MessagePipe)
+### 2. State and Logic Ownership
+
+Use this responsibility model in consuming projects:
+
+| Concern | Owner | Allowed state | Examples |
+|---|---|---|---|
+| Domain state / 状態管理 | Domain models, entities, value objects | Durable gameplay state and invariants | placed flags, score, level completion, valid transitions |
+| Business logic | Domain first; Application for orchestration | Domain-owned state plus short-lived command locals | rule decisions, command handling, repository-backed initialization |
+| Presentation logic | Presenters and presentation services | Transient UI/interaction state | selected item, button guard, drag candidate, formatted UI text |
+| View display | MonoBehaviour views | Serialized references and cached Unity components | text/image assignment, input listener exposure |
+| Infrastructure | Infrastructure services | Technical caches/resources | addressable handles, registered cameras, input locks, blur refs |
+
+`XxxService` does not automatically mean stateless. Services can hold state when the state is part of their technical or orchestration responsibility, but durable gameplay truth belongs in models/entities. If a value must survive across commands as business truth, make it model state. If a value only describes an in-progress UI gesture, transition, or technical resource, a presenter/service may own it.
+
+### 3. Event-Driven Communication (MessagePipe)
 
 Events are `readonly struct`s. Services inject `IPublisher<T>` to fire, consumers inject `ISubscriber<T>` to listen.
 
@@ -128,23 +155,23 @@ ScreenChangedEvent                          // marker (no data)
 BlurTransitionEvent(bool Enabled, EaseType Ease, float Duration)
 ```
 
-### 3. Async-First (UniTask)
+### 4. Async-First (UniTask)
 
 All I/O operations return `UniTask`. Cancellation tokens propagate through all call chains. Use `UniTask.CompletedTask` for sync implementations of async interfaces.
 
-### 4. IDisposable Resource Management
+### 5. IDisposable Resource Management
 
 - Asset handles are ref-counted — dispose when done.
 - Input locks return `IDisposable` — use `using var _ = lockService.Lock();`.
 - Blur requests return `IDisposable`.
 - `WindowView.AddDisposable()` tracks subscriptions, cleaned on hide.
 
-### 5. Thin Views
+### 6. Thin Views
 
 MonoBehaviour views are display-only. No business logic. They:
-- Receive injected dependencies via `[Inject]`
-- Forward user input to Presenters
-- Bind UI elements to state
-- Override `WindowView` lifecycle hooks
+- Receive an injected presenter via `[Inject]` and bind it with `presenter.Bind(this)`
+- Expose display methods, for example `SetCount(...)` or `SetInteractable(...)`
+- Expose input subscription methods, for example `AddClickListener(...)`
+- Forward `WindowView` lifecycle hooks to `WindowPresenter<TView>`
 
-All logic lives in Presenters/Controllers (plain C# classes).
+All view-specific logic lives in presenters/controllers (plain C# classes). Presenters own disposable subscriptions and are registered in VContainer.

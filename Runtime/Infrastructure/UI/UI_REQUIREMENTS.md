@@ -11,7 +11,8 @@ A general-purpose UI framework for managing windows (menus, HUD, popups, dialogs
 - Each window is a **prefab** loaded via Addressables at runtime.
 - Windows extend the `WindowView` base class (MonoBehaviour).
 - Windows follow a lifecycle: **Load → Initialize → Show (transition in) → Active → Hide (transition out) → Dispose**.
-- `WindowView` provides virtual lifecycle methods: `OnInitialize()`, `OnShow()`, `OnHide()`, `OnDispose()`.
+- `WindowView` provides virtual lifecycle methods: `OnInitialize()`, `OnBeforeShow()`, `OnShow()`, `OnBeforeHide()`, `OnHide()`, `OnDispose()`.
+- Windows may delegate those lifecycle hooks to a `WindowPresenter<TView>` from `StickerFwk.Core.Presentation` to keep view logic out of the MonoBehaviour.
 - Windows are instantiated under the appropriate layer Canvas when opened and destroyed when closed.
 - The system manages a **window stack** per layer for navigation history.
 - Each window instance is tracked internally via a `WindowHandle` that stores the view, asset handle, input blocker, and layer reference.
@@ -108,6 +109,7 @@ Runtime overrides can be passed via a `WindowOptions` object when calling `UISer
 
 - Follows existing project conventions (see `CLAUDE.md`).
 - MonoBehaviour Views are **thin** — no logic beyond displaying state and forwarding input.
+- View-specific logic belongs in plain C# presenters (`Presenter<TView>` / `WindowPresenter<TView>`): subscriptions, UI formatting, command publishing, and lifecycle side effects.
 - All async operations use **UniTask**.
 - No singletons — `UIService` is registered as a singleton in VContainer (`RootLifetimeScope`).
 - `UIService` implements `IStartable` (initializes on app start) and `IDisposable` (cleans up all windows).

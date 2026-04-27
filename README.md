@@ -25,6 +25,7 @@ Packages/com.stickerfwk.core/
 │   │   ├── InspectorTools/
 │   │   ├── MasterData/
 │   │   ├── Physics/
+│   │   ├── Presentation/
 │   │   ├── Rendering/
 │   │   ├── Screen/
 │   │   ├── Time/
@@ -59,6 +60,7 @@ Packages/com.stickerfwk.core/
 | `InspectorTools/` | `ButtonAttribute` | Custom inspector attributes |
 | `MasterData/` | `IMasterData`, `IMasterDataRepository`, `IMasterDataScriptableObject`, `MasterAsset<T>`, `MasterData<T>` | Static data loading and query |
 | `Physics/` | `IWorldRaycastService` | Physics raycast contract |
+| `Presentation/` | `IPresenter<TView>`, `Presenter<TView>`, `IWindowPresenter<TView>`, `WindowPresenter<TView>` | Plain C# presenter contracts for moving view-specific logic out of MonoBehaviours |
 | `Rendering/` | `IBlurService`, `BlurTransitionEvent` | Blur effect contract and event |
 | `Screen/` | `ScreenService`, `ScreenChangedEvent` | Screen resolution monitoring |
 | `Time/` | `ITimeService` | Time abstraction contract |
@@ -105,6 +107,7 @@ a cohesive module with many related types use a **hierarchical sub-namespace**
 | `Core/Initialization/` | `StickerFwk.Core.Initialization` | Hierarchical |
 | `Core/InspectorTools/` | `StickerFwk.Core.InspectorTools` | Hierarchical |
 | `Core/MasterData/` | `StickerFwk.Core.MasterData` | Hierarchical |
+| `Core/Presentation/` | `StickerFwk.Core.Presentation` | Hierarchical |
 | `Core/Rendering/` | `StickerFwk.Core.Rendering` | Hierarchical |
 | `Core/UI/` | `StickerFwk.Core.UI` | Hierarchical |
 
@@ -225,8 +228,8 @@ Assets/Scripts/
 │   ├── Features/
 │   │   └── <FeatureName>/
 │   │       ├── Domain/                    # Entities, value objects, domain events
-│   │       ├── Application/               # Use cases, presenters, services
-│   │       └── Presentation/              # MonoBehaviour views, UI
+│   │       ├── Application/               # Use cases, app services, ports
+│   │       └── Presentation/              # MonoBehaviour views, presenters, UI services
 │   ├── Installers/                        # VContainer LifetimeScopes
 │   └── MasterData/                        # Game-specific MasterData<T> subclasses
 ```
@@ -239,7 +242,7 @@ Assets/Scripts/
 | `<Game>.Infrastructure.Game` | Game-specific implementations |
 | `<Game>.Runtime.Features.<X>.Domain` | Feature domain layer (`noEngineReferences: true`) |
 | `<Game>.Runtime.Features.<X>.Application` | Feature application/use-case layer |
-| `<Game>.Runtime.Features.<X>.Presentation` | Feature MonoBehaviour views |
+| `<Game>.Runtime.Features.<X>.Presentation` | Feature MonoBehaviour views, presenters, repositories, adapters |
 | `<Game>.Runtime.Installers` | DI registration (LifetimeScopes) |
 
 ### Layer dependency rules
@@ -260,9 +263,48 @@ Key constraints:
 - **Domain has zero assembly references.** Use `noEngineReferences: true` to
   enforce this at compile time.
 
+### Responsibility model
+
+Use this model to decide where state management, business logic, presentation logic, and service state belong:
+
+| Concern | Owner | Allowed state | Examples |
+|---|---|---|---|
+| Domain state / 状態管理 | Domain models, entities, value objects | Durable gameplay state and invariants | placed flags, score, level completion, valid transitions |
+| Business logic | Domain first; Application for use-case orchestration | Domain-owned state plus short-lived command locals | rule decisions, command handling, repository-backed initialization |
+| Presentation logic | Presenters and presentation services | Transient UI/interaction state | button guards, selected item, drag candidate, formatted UI text |
+| View display | MonoBehaviour views | Serialized references and cached Unity components | text/image assignment, input listener exposure |
+| Infrastructure | Infrastructure services | Technical caches/resources | addressable handles, registered cameras, input locks, blur refs |
+
+`XxxService` does not automatically mean stateless. Services can hold state when the state is part of their responsibility, but durable gameplay truth belongs in models/entities. If a value must survive across commands as business truth, make it model state. If a value only describes an in-progress UI gesture, transition, or technical resource, a presenter/service may own it.
+
 ---
 
-## 5. Code Style & Naming
+## 5. Presenter Pattern
+
+Use `StickerFwk.Core.Presentation` when a view needs logic beyond pure rendering. Views remain MonoBehaviours with serialized Unity references; presenters are plain C# classes that own subscriptions, button-command translation, UI text formatting, and other view-specific orchestration.
+
+**Framework types:**
+- `IPresenter<TView>` / `Presenter<TView>` — bind/unbind/dispose lifecycle for any view type.
+- `IWindowPresenter<TView>` / `WindowPresenter<TView>` — adds `WindowView` lifecycle hooks: initialize, before show, show, before hide, hide.
+
+**Feature placement:**
+```
+Assets/Scripts/Runtime/Features/<FeatureName>/Presentation/
+  Views/
+    XxxView.cs              # MonoBehaviour: serialized refs, display APIs, input listener APIs
+  Presenters/
+    XxxPresenter.cs         # Plain C#: subscriptions, formatting, command/event publishing
+```
+
+**Rules:**
+- Register presenters with VContainer in the feature LifetimeScope.
+- Inject the presenter into the view and call `presenter.Bind(this)` from the view's `[Inject]` method.
+- Forward `WindowView` lifecycle callbacks to `WindowPresenter<TView>`.
+- Keep `IDisposable` subscriptions in the presenter. Views should expose small APIs such as `SetCount(...)`, `SetInteractable(...)`, or `AddClickListener(...)`.
+
+---
+
+## 6. Code Style & Naming
 
 ### Language
 
@@ -278,6 +320,7 @@ Key constraints:
 |---|---|---|
 | MonoBehaviour view | `XxxView` | `SafeAreaView`, `InputBlockerView` |
 | UI window | `XxxWindow` (extends `WindowView`) | `PlinkoWindow` |
+| Presenter | `XxxPresenter` (plain C#) | `PlinkoPresenter` |
 | Aggregate root / state | `XxxModel` | `CameraModel`, `PlinkoModel` |
 | Entity | `XxxEntity` | `BallEntity` |
 | Service (stateless) | `XxxService` | `CameraService`, `TimeService` |
@@ -292,7 +335,7 @@ Key constraints:
 
 ---
 
-## 6. Required Dependencies
+## 7. Required Dependencies
 
 | Package | Purpose | Required |
 |---|---|---|

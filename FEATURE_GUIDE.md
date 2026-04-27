@@ -12,8 +12,8 @@ Every feature lives in its own folder under `Assets/Scripts/Features/{FeatureNam
 ```
 Assets/Scripts/Features/Plinko/
   PlinkoLifetimeScope.cs      <- DI registration (VContainer)
-  PlinkoPresenter.cs           <- Business logic
   PlinkoModel.cs               <- State / data
+  PlinkoPresenter.cs           <- Presentation logic bound to the view
   PlinkoWindow.cs              <- UI (extends WindowView)
   PlinkoEvents.cs              <- MessagePipe event structs
   Plinko.asmdef                <- Assembly definition (optional, recommended for large features)
@@ -29,6 +29,22 @@ Assets/Addressables/Views/
 ---
 
 ## Minimum Classes
+
+### Where State and Logic Go
+
+Before adding a class, decide what kind of state or logic it owns:
+
+| If you are adding... | Put it in... | Notes |
+|---|---|---|
+| Durable gameplay state / 状態管理 | Model/entity/value object | The source of truth for rules and progress. Pure C#, no Unity dependencies. |
+| Business rule decision | Domain model/entity first | Application services can orchestrate, but rules should be testable without Unity. |
+| Use-case flow | Application or feature service | Coordinates repositories, commands, and domain events. Keep durable state in models. |
+| UI formatting or button command translation | Presenter | Plain C# bound to a view via `Presenter<TView>` or `WindowPresenter<TView>`. |
+| Drag/layout/animation orchestration | Presentation service | May hold transient interaction state; not the source of truth for game progress. |
+| Text/image/component assignment | View | MonoBehaviour with serialized references and display/input APIs only. |
+| Cache, registry, lock, resource handle | Infrastructure service | Technical state, not feature business state. |
+
+`XxxService` can be stateful when it owns workflow, interaction, or technical state. It should not own durable gameplay truth; use a model/entity for that.
 
 ### 1. Model — State and Data
 
@@ -92,9 +108,9 @@ namespace App.Features.Plinko
 }
 ```
 
-### 3. Presenter — Business Logic
+### 3. Presenter — Presentation Logic
 
-Plain C# class. Receives services and model via constructor injection. Orchestrates gameplay logic. Never references MonoBehaviours directly — communicates with Views through events or methods the View calls.
+Plain C# class. Receives services and model via constructor injection. Owns view-specific logic such as input command translation, display formatting, and subscriptions. Bind it to a view with `Presenter<TView>` or `WindowPresenter<TView>`.
 
 ```csharp
 using System;
@@ -102,16 +118,18 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
 using StickerFwk.Core;
+using StickerFwk.Core.Presentation;
 using StickerFwk.Core.UI;
 
 namespace App.Features.Plinko
 {
-    public class PlinkoPresenter : IDisposable
+    public class PlinkoPresenter : WindowPresenter<PlinkoWindow>
     {
         readonly PlinkoModel _model;
         readonly IUIService _uiService;
         readonly IInputLockService _inputLockService;
         readonly IPublisher<PlinkoScoreChangedEvent> _scorePublisher;
+        IDisposable _dropSubscription;
 
         public PlinkoPresenter(
             PlinkoModel model,
@@ -127,12 +145,32 @@ namespace App.Features.Plinko
 
         public bool CanDrop => _model.BallsRemaining > 0 && !_model.IsDropping;
 
-        public void OnBallDropRequested()
+        public override UniTask InitializeAsync(CancellationToken ct)
         {
-            if (!CanDrop) return;
+            UpdateView();
+            return UniTask.CompletedTask;
+        }
+
+        public override void OnShow()
+        {
+            _dropSubscription = View.AddDropListener(OnBallDropRequested);
+        }
+
+        public override void OnHide()
+        {
+            ReleaseDropSubscription();
+        }
+
+        void OnBallDropRequested()
+        {
+            if (!CanDrop)
+            {
+                return;
+            }
 
             _model.BallsRemaining--;
             _model.IsDropping = true;
+            UpdateView();
         }
 
         public void OnBallLanded(int slotIndex, int points)
@@ -140,6 +178,7 @@ namespace App.Features.Plinko
             _model.IsDropping = false;
             _model.Score += points;
             _scorePublisher.Publish(new PlinkoScoreChangedEvent(_model.Score));
+            UpdateView();
         }
 
         public async UniTask OnGameOver(CancellationToken ct)
@@ -148,9 +187,27 @@ namespace App.Features.Plinko
             await _uiService.Push<PlinkoResultWindow>(ct: ct);
         }
 
-        public void Dispose()
+        void UpdateView()
         {
-            // Cleanup if needed
+            if (!IsBound)
+            {
+                return;
+            }
+
+            View.SetScore(_model.Score);
+            View.SetBallsRemaining(_model.BallsRemaining);
+            View.SetDropInteractable(CanDrop);
+        }
+
+        protected override void OnDispose()
+        {
+            ReleaseDropSubscription();
+        }
+
+        void ReleaseDropSubscription()
+        {
+            _dropSubscription?.Dispose();
+            _dropSubscription = null;
         }
     }
 }
@@ -158,9 +215,10 @@ namespace App.Features.Plinko
 
 ### 4. Window (View) — UI Display
 
-Extends `WindowView`. Thin — display state, forward input to Presenter. Uses `[Inject]` for dependencies.
+Extends `WindowView`. Thin — holds serialized UI references, displays values provided by the presenter, exposes input subscriptions, and forwards lifecycle hooks to the presenter.
 
 ```csharp
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core.UI;
@@ -176,33 +234,53 @@ namespace App.Features.Plinko
         [SerializeField] Text _ballsText;
         [SerializeField] CoolButton _dropButton;
 
-        [Inject] PlinkoPresenter _presenter;
+        PlinkoPresenter _presenter;
 
-        public override async UniTask OnInitialize(CancellationToken ct)
+        [Inject]
+        public void Construct(PlinkoPresenter presenter)
         {
-            UpdateDisplay();
-            await UniTask.CompletedTask;
+            _presenter = presenter;
+            _presenter.Bind(this);
+        }
+
+        public override UniTask OnInitialize(CancellationToken ct)
+        {
+            return _presenter.InitializeAsync(ct);
         }
 
         protected override void OnShowInternal()
         {
-            AddDisposable(_dropButton.AddClickListener(() =>
-            {
-                _presenter.OnBallDropRequested();
-                UpdateDisplay();
-            }));
+            _presenter.OnShow();
         }
 
-        public void OnScoreChanged(int newScore)
+        protected override void OnHideInternal()
         {
-            _scoreText.text = $"Score: {newScore}";
+            _presenter.OnHide();
         }
 
-        void UpdateDisplay()
+        protected override void OnDisposeInternal()
         {
-            _scoreText.text = $"Score: {_presenter.Model.Score}";
-            _ballsText.text = $"Balls: {_presenter.Model.BallsRemaining}";
-            _dropButton.Interactable = _presenter.CanDrop;
+            _presenter.Dispose();
+        }
+
+        public IDisposable AddDropListener(Action listener)
+        {
+            return _dropButton.AddClickListener(listener);
+        }
+
+        public void SetScore(int score)
+        {
+            _scoreText.text = $"Score: {score}";
+        }
+
+        public void SetBallsRemaining(int ballsRemaining)
+        {
+            _ballsText.text = $"Balls: {ballsRemaining}";
+        }
+
+        public void SetDropInteractable(bool interactable)
+        {
+            _dropButton.Interactable = interactable;
         }
     }
 }
@@ -233,7 +311,7 @@ namespace App.Features.Plinko
             builder.Register<PlinkoModel>(Lifetime.Scoped);
 
             // Presenter
-            builder.Register<PlinkoPresenter>(Lifetime.Scoped);
+            builder.Register<PlinkoPresenter>(Lifetime.Transient);
 
             // MessagePipe events
             var options = builder.RegisterMessagePipe();

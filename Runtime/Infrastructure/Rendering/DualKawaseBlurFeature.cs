@@ -18,6 +18,8 @@ namespace StickerFwk.Infrastructure.Rendering
         private int _cachedWidth;
         private int _cachedHeight;
         private GraphicsFormat _cachedFormat;
+        private int _cachedCacheVersion = -1;
+        private BlurVolume _cachedBlurSource;
         private bool _cacheReady;
 
         public override void Create()
@@ -54,18 +56,15 @@ namespace StickerFwk.Infrastructure.Rendering
 
             var isManual = blur.manualUpdate.value;
             var desc = renderingData.cameraData.cameraTargetDescriptor;
-
-            if (blur.NeedsUpdate)
-            {
-                _cacheReady = false;
-                blur.ClearDirty();
-            }
+            var cacheVersion = blur.CacheVersion;
 
             var hasCacheMatch = _cacheReady
                 && _cachedBlur != null
                 && _cachedWidth == desc.width
                 && _cachedHeight == desc.height
-                && _cachedFormat == desc.graphicsFormat;
+                && _cachedFormat == desc.graphicsFormat
+                && _cachedCacheVersion == cacheVersion
+                && _cachedBlurSource == blur;
 
             if (isManual && hasCacheMatch)
             {
@@ -79,6 +78,8 @@ namespace StickerFwk.Infrastructure.Rendering
             {
                 EnsureCacheTexture(desc.width, desc.height, desc.graphicsFormat);
                 _cacheReady = true;
+                _cachedCacheVersion = cacheVersion;
+                _cachedBlurSource = blur;
             }
 
             _pass.renderPassEvent = blur.injectionPoint.value;
@@ -118,6 +119,9 @@ namespace StickerFwk.Infrastructure.Rendering
 
             _cachedBlur?.Release();
             _cachedBlur = null;
+            _cachedCacheVersion = -1;
+            _cachedBlurSource = null;
+            _cacheReady = false;
         }
     }
 }

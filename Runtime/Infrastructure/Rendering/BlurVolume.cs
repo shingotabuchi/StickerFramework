@@ -9,6 +9,8 @@ namespace StickerFwk.Infrastructure.Rendering
     [VolumeComponentMenu("Custom/Dual Kawase Blur")]
     public sealed class BlurVolume : VolumeComponent, IPostProcessComponent
     {
+        private static int s_nextCacheVersion;
+
         public BoolParameter enabled = new BoolParameter(false, overrideState: true);
         public ClampedFloatParameter intensity = new ClampedFloatParameter(0f, 0f, 1f);
         public NoInterpClampedIntParameter iterations = new NoInterpClampedIntParameter(4, 1, 8);
@@ -18,18 +20,11 @@ namespace StickerFwk.Infrastructure.Rendering
         public BoolParameter manualUpdate = new BoolParameter(false, overrideState: true);
         [HideInInspector] public NoInterpIntParameter cacheVersion = new NoInterpIntParameter(0, overrideState: true);
 
-        private int _clearedCacheVersion = -1;
-
-        public bool NeedsUpdate => _clearedCacheVersion != cacheVersion.value;
+        public int CacheVersion => cacheVersion.value;
 
         public new void SetDirty()
         {
-            cacheVersion.Override(cacheVersion.value + 1);
-        }
-
-        internal void ClearDirty()
-        {
-            _clearedCacheVersion = cacheVersion.value;
+            cacheVersion.Override(++s_nextCacheVersion);
         }
 
         public bool IsActive()

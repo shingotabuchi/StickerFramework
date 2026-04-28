@@ -2,8 +2,8 @@ namespace StickerFwk.Core
 {
     public enum CameraId
     {
-        Room = 10,
-        RoomUI = 20,
+        Stage = 10,
+        StageUI = 20,
         OverlaySticker = 30
     }
 }

@@ -1,0 +1,20 @@
+{
+    "name": "StickerFwk.Core.Debug.Editor",
+    "rootNamespace": "StickerFwk.Core.Debug.Editor",
+    "references": [
+        "StickerFwk.Core.Debug"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "STICKER_DEBUG"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

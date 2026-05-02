@@ -118,7 +118,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
 
             var keysList = new List<string>(keys);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-            var tasks = new List<UniTask>();
+            using var _ = PoolScope.List<UniTask>(out var tasks);
             foreach (var key in keysList)
             {
                 AddRef(key);
@@ -203,8 +203,13 @@ namespace StickerFwk.Infrastructure.AssetManagement
             if (_isDisposed) throw new ObjectDisposedException(nameof(AddressableCache));
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-            var tasks = new List<UniTask>();
-            var keySet = new HashSet<string>(keys);
+            using var __ = PoolScope.List<UniTask>(out var tasks);
+            using var ___ = PoolScope.HashSet<string>(out var keySet);
+            foreach (var key in keys)
+            {
+                keySet.Add(key);
+            }
+
             foreach (var key in keySet)
             {
                 AddRef(key);

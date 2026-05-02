@@ -14,7 +14,7 @@ namespace StickerFwk.Infrastructure.MasterData
         private const string MasterDataLabel = "MasterData";
 
         private readonly IAssetRequester _assetRequester;
-        private readonly Dictionary<Type, IReadOnlyList<IMasterData>> _tables = new();
+        private readonly Dictionary<Type, List<IMasterData>> _tables = new();
         private readonly Dictionary<Type, Dictionary<string, IMasterData>> _indices = new();
 
         private IPreloadHandle _preloadHandle;
@@ -54,19 +54,30 @@ namespace StickerFwk.Infrastructure.MasterData
                 var type = masterDataSo.Type;
                 var data = masterDataSo.Data;
 
-                _tables[type] = data;
+                if (!_tables.TryGetValue(type, out var table))
+                {
+                    table = new List<IMasterData>();
+                    _tables.Add(type, table);
+                }
 
-                var index = new Dictionary<string, IMasterData>();
+                if (!_indices.TryGetValue(type, out var index))
+                {
+                    index = new Dictionary<string, IMasterData>();
+                    _indices.Add(type, index);
+                }
+
                 foreach (var entry in data)
                 {
                     if (!index.TryAdd(entry.Id, entry))
                     {
                         Log.Warning($"Duplicate master data id '{entry.Id}' in {type.Name}. Skipping duplicate.");
+                        continue;
                     }
+
+                    table.Add(entry);
                 }
 
-                _indices[type] = index;
-                Log.Info($"Loaded master data: {type.Name} ({data.Count} entries)");
+                Log.Info($"Loaded master data asset: {key} ({type.Name}, {data.Count} entries)");
             }
 
             Log.Info($"MasterDataRepository loaded {_tables.Count} table(s).");
@@ -78,7 +89,13 @@ namespace StickerFwk.Infrastructure.MasterData
 
             if (_tables.TryGetValue(typeof(T), out var data))
             {
-                return data as IReadOnlyList<T>;
+                var result = new T[data.Count];
+                for (var i = 0; i < data.Count; i++)
+                {
+                    result[i] = data[i] as T;
+                }
+
+                return result;
             }
 
             Log.Warning($"No master data found for type {typeof(T).Name}.");

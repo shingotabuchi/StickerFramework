@@ -46,6 +46,11 @@ namespace StickerFwk.Infrastructure.Rendering
                 return;
             }
 
+            if (!renderingData.cameraData.postProcessEnabled)
+            {
+                return;
+            }
+
             var stack = VolumeManager.instance.stack;
             var blur = stack.GetComponent<BlurVolume>();
 

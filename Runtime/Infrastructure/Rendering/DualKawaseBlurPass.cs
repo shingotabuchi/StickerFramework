@@ -145,23 +145,13 @@ namespace StickerFwk.Infrastructure.Rendering
                 lastUp = upTexture;
             }
 
-            TextureHandle finalTexture;
+            AddBlitPass(renderGraph, lastUp, cameraColor, _material, 1, "KawaseBlurFinal");
+
             if (_cacheTarget != null)
             {
-                finalTexture = renderGraph.ImportTexture(_cacheTarget);
+                var cacheTexture = renderGraph.ImportTexture(_cacheTarget);
+                AddBlitPass(renderGraph, lastUp, cacheTexture, _material, 1, "KawaseBlurCache");
             }
-            else
-            {
-                var finalDesc = baseDesc;
-                finalDesc.width = baseDesc.width;
-                finalDesc.height = baseDesc.height;
-                finalDesc.name = "_BlurFinal";
-                finalTexture = renderGraph.CreateTexture(finalDesc);
-            }
-
-            AddBlitPass(renderGraph, lastUp, finalTexture, _material, 1, "KawaseBlurFinal");
-
-            resourceData.cameraColor = finalTexture;
         }
 
         private static void AddBlitPass(RenderGraph renderGraph, TextureHandle source, TextureHandle destination,

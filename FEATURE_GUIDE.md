@@ -440,7 +440,7 @@ await _sceneTransitionService.TransitionToSceneAsync(
     beforeLoad: async ct =>
     {
         // Optional: cleanup before the old scene unloads
-        await _uiService.PopAll(UILayer.Window, ct);
+        await _uiService.PopAll(UILayer.UI, ct);
     });
 ```
 

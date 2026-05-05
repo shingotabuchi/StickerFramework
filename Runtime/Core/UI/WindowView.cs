@@ -11,7 +11,7 @@ namespace StickerFwk.Core.UI
     public abstract class WindowView : MonoBehaviour
     {
         [Header("Window Configuration")]
-        [SerializeField] UILayer _layer = UILayer.Window;
+        [SerializeField] UILayer _layer = UILayer.UI;
         [SerializeField] bool _isBlocking = true;
         [SerializeField] TransitionType _showTransition = TransitionType.Fade;
         [SerializeField] TransitionType _hideTransition = TransitionType.Fade;

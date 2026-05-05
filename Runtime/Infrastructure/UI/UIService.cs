@@ -78,7 +78,7 @@ namespace StickerFwk.Infrastructure.UI
             return window as T;
         }
 
-        public async UniTask Pop(UILayer layer = UILayer.Window, CancellationToken ct = default)
+        public async UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
             var stack = _stacks[layer];
             if (stack.Count == 0)

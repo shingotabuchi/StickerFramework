@@ -57,6 +57,21 @@ namespace StickerFwk.Infrastructure.Camera
             return null;
         }
 
+        public bool TryGetCamera(CameraId id, out UnityEngine.Camera camera)
+        {
+            return _model.TryGet(id, out camera);
+        }
+
+        public UnityEngine.Camera GetRequiredCamera(CameraId id)
+        {
+            if (!_model.TryGet(id, out var camera) || camera == null)
+            {
+                throw new System.InvalidOperationException(
+                    $"[CameraService] Required camera '{id}' is not registered.");
+            }
+            return camera;
+        }
+
         public UnityEngine.Camera GetCameraForRenderer(Renderer renderer)
         {
             foreach (var kvp in _model.GetAll())

@@ -6,7 +6,7 @@ namespace StickerFwk.Core.UI
     public interface IUIService
     {
         UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
-        UniTask Pop(UILayer layer = UILayer.Window, CancellationToken ct = default);
+        UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default);
         UniTask Pop<T>(CancellationToken ct = default) where T : WindowView;
         UniTask<T> Replace<T>(UILayer layer, string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
         UniTask PopAll(UILayer layer, CancellationToken ct = default);

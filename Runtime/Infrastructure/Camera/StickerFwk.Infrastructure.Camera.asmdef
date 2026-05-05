@@ -5,7 +5,9 @@
         "StickerFwk.Core",
         "VContainer",
         "MessagePipe",
-        "UniTask"
+        "UniTask",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

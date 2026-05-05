@@ -7,11 +7,12 @@ namespace StickerFwk.Core
 {
     public sealed class CameraFitter : MonoBehaviour
     {
-        [SerializeField] private Camera[] _cameras;
+        [SerializeField] private CameraId[] _cameraIds;
         [SerializeField] private float _width = 5f;
         [SerializeField] private float _height = 5f;
         [SerializeField] private float _safeHeightMultiplier = 1f;
 
+        private ICameraService _cameraService;
         private ISubscriber<ScreenChangedEvent> _subscriber;
         private IDisposable _subscription;
 
@@ -33,8 +34,9 @@ namespace StickerFwk.Core
         }
 
         [Inject]
-        public void Construct(ISubscriber<ScreenChangedEvent> subscriber)
+        public void Construct(ICameraService cameraService, ISubscriber<ScreenChangedEvent> subscriber)
         {
+            _cameraService = cameraService;
             _subscription?.Dispose();
             _subscriber = subscriber;
             _subscription = _subscriber.Subscribe(_ => Apply());
@@ -42,16 +44,16 @@ namespace StickerFwk.Core
 
         private void Apply()
         {
-            if (_cameras == null || _cameras.Length == 0)
+            if (_cameraIds == null || _cameraIds.Length == 0 || _cameraService == null)
             {
                 return;
             }
 
             Log.Info($"CameraFitter: Apply - width: {_width}, height: {_height}");
 
-            foreach (var cam in _cameras)
+            for (var i = 0; i < _cameraIds.Length; i++)
             {
-                if (cam != null)
+                if (_cameraService.TryGetCamera(_cameraIds[i], out var cam) && cam != null)
                 {
                     cam.FitToArea(_width, _height, safeHeightMultiplier: _safeHeightMultiplier);
                 }

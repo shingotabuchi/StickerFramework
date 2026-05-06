@@ -1,39 +1,31 @@
-using System;
 using System.Collections.Generic;
 
 namespace StickerFwk.Core
 {
-    // Snapshot of one camera's state used by CameraStackResolver. Built each frame from the
-    // CameraProfileService registry + per-camera lease counts. Pure data — no Unity dependencies
-    // so the resolver can be unit-tested in isolation.
+    // Snapshot of one camera registered through the active profiles. Pure data so
+    // CameraStackResolver can be unit-tested without Unity.
     public readonly struct CameraSlot
     {
         public readonly CameraId Id;
         public readonly UnityEngine.Rendering.Universal.CameraRenderType RenderType;
         public readonly float Depth;
-        public readonly CameraActivationPolicy ActivationPolicy;
-        public readonly int LeaseCount;
 
         public CameraSlot(
             CameraId id,
             UnityEngine.Rendering.Universal.CameraRenderType renderType,
-            float depth,
-            CameraActivationPolicy activationPolicy,
-            int leaseCount)
+            float depth)
         {
             Id = id;
             RenderType = renderType;
             Depth = depth;
-            ActivationPolicy = activationPolicy;
-            LeaseCount = leaseCount;
         }
     }
 
     // Decides which cameras render and how the base camera's overlay stack is composed.
     //
     // Rules:
-    //   1. A slot is "wanted" iff (a) the active mode includes its CameraId AND
-    //      (b) its activation policy is AlwaysOn or its lease count is > 0.
+    //   1. Every slot supplied is "wanted" (slots come from active profiles only — there is no
+    //      additional gate like mode or lease).
     //   2. Among wanted Base slots, the lowest-depth one wins. Other Base slots are forced off.
     //      Only one base camera may render at a time.
     //   3. The winner's overlay stack = all wanted Overlay slots, sorted by depth ascending.
@@ -53,12 +45,10 @@ namespace StickerFwk.Core
             }
         }
 
-        // outEnabled : final enabled set (winning base + wanted overlays).
+        // outEnabled : final enabled set (winning base + all overlays).
         // outStack   : overlay ids sorted by depth ascending; they go into the winning base's stack.
         public static Result Resolve(
             IReadOnlyList<CameraSlot> slots,
-            CameraMode mode,
-            Func<CameraMode, CameraId, bool> modeIncludes,
             List<CameraId> outEnabled,
             List<CameraId> outStack)
         {
@@ -69,15 +59,10 @@ namespace StickerFwk.Core
             CameraId winningBase = default;
             var winningBaseDepth = float.PositiveInfinity;
 
-            // Pass 1: pick winning base.
             for (var i = 0; i < slots.Count; i++)
             {
                 var s = slots[i];
                 if (s.RenderType != UnityEngine.Rendering.Universal.CameraRenderType.Base)
-                {
-                    continue;
-                }
-                if (!IsWanted(s, mode, modeIncludes))
                 {
                     continue;
                 }
@@ -89,7 +74,6 @@ namespace StickerFwk.Core
                 }
             }
 
-            // Pass 2: collect overlays + emit enabled set.
             for (var i = 0; i < slots.Count; i++)
             {
                 var s = slots[i];
@@ -101,16 +85,10 @@ namespace StickerFwk.Core
                     }
                     continue;
                 }
-                if (!IsWanted(s, mode, modeIncludes))
-                {
-                    continue;
-                }
                 outEnabled.Add(s.Id);
                 outStack.Add(s.Id);
             }
 
-            // Sort overlays by depth using the source slot list. Linear scan in Compare is OK
-            // because overlay counts are tiny (single digits in practice).
             outStack.Sort((a, b) =>
             {
                 var da = FindDepth(slots, a);
@@ -119,19 +97,6 @@ namespace StickerFwk.Core
             });
 
             return new Result(hasBase, winningBase);
-        }
-
-        static bool IsWanted(CameraSlot s, CameraMode mode, Func<CameraMode, CameraId, bool> modeIncludes)
-        {
-            if (!modeIncludes(mode, s.Id))
-            {
-                return false;
-            }
-            if (s.ActivationPolicy == CameraActivationPolicy.AlwaysOn)
-            {
-                return true;
-            }
-            return s.LeaseCount > 0;
         }
 
         static float FindDepth(IReadOnlyList<CameraSlot> slots, CameraId id)

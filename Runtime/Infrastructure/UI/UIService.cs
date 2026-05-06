@@ -20,7 +20,6 @@ namespace StickerFwk.Infrastructure.UI
         private readonly IAssetRequester _assetRequester;
         private readonly UILayerManager _layerManager;
         private readonly IObjectResolver _resolver;
-        private readonly ICameraUsageService _cameraUsageService;
         private readonly Dictionary<UILayer, Stack<WindowHandle>> _stacks;
         private readonly IPublisher<WindowClosedEvent> _windowClosedPublisher;
         private readonly IPublisher<WindowOpenedEvent> _windowOpenedPublisher;
@@ -30,13 +29,11 @@ namespace StickerFwk.Infrastructure.UI
             IAssetRequester assetRequester,
             IObjectResolver resolver,
             ICameraService cameraService,
-            ICameraUsageService cameraUsageService,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
-            _cameraUsageService = cameraUsageService;
             _windowOpenedPublisher = windowOpenedPublisher;
             _windowClosedPublisher = windowClosedPublisher;
             _layerManager = new UILayerManager(cameraService);
@@ -230,9 +227,6 @@ namespace StickerFwk.Infrastructure.UI
                 return null;
             }
 
-            // Acquire one camera-usage lease per window. Released when the window is popped.
-            var cameraLease = _cameraUsageService.Acquire(UILayerManager.LayerToCameraId(layer));
-
             var stack = _stacks[layer];
             if (stack.Count == 0)
             {
@@ -261,7 +255,7 @@ namespace StickerFwk.Infrastructure.UI
             var windowView = instance.GetComponent<WindowView>();
             await windowView.OnInitialize(ct);
 
-            var windowHandle = new WindowHandle(key, windowView, blocker, layer, assetHandle, cameraLease);
+            var windowHandle = new WindowHandle(key, windowView, blocker, layer, assetHandle);
             stack.Push(windowHandle);
 
             windowView.OnBeforeShow();

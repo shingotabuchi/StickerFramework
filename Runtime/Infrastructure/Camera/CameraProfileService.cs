@@ -3,9 +3,18 @@ using System.Collections.Generic;
 using MessagePipe;
 using StickerFwk.Core;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace StickerFwk.Infrastructure.Camera
 {
+    // Owns the lifecycle of cameras declared by CameraProfile assets.
+    //
+    // Activation model: a camera renders iff it is declared by at least one currently-pushed
+    // profile, AND it survives the resolver's "losing-base" rule (only the lowest-depth Base
+    // renders; other Bases in the union are forced off).
+    //
+    // No mode, no per-camera lease — pushing/popping profiles is the only way to turn cameras
+    // on or off.
     public class CameraProfileService : ICameraProfileService, IDisposable
     {
         readonly CameraSystemSettings _settings;
@@ -15,6 +24,9 @@ namespace StickerFwk.Infrastructure.Camera
         readonly Dictionary<CameraProfileId, ProfileEntry> _profiles = new Dictionary<CameraProfileId, ProfileEntry>();
         readonly Dictionary<CameraId, CameraEntry> _cameras = new Dictionary<CameraId, CameraEntry>();
         readonly List<CameraProfileId> _activeIds = new List<CameraProfileId>();
+        readonly List<CameraSlot> _slotBuffer = new List<CameraSlot>();
+        readonly List<CameraId> _enabledBuffer = new List<CameraId>();
+        readonly List<CameraId> _stackBuffer = new List<CameraId>();
 
         CameraFactory _factory;
         Transform _root;
@@ -84,6 +96,7 @@ namespace StickerFwk.Infrastructure.Camera
             _activeIds.Add(profileId);
 
             Log.Info($"[CameraProfileService] Pushed profile '{profileId}'. Active profiles: {_activeIds.Count}.");
+            Recompute();
             _appliedPublisher.Publish(new CameraProfileAppliedEvent(profileId, true));
 
             return new Lease(this, profileId);
@@ -91,7 +104,6 @@ namespace StickerFwk.Infrastructure.Camera
 
         public void Dispose()
         {
-            // Pop all active profiles. Iterate by index to avoid mutating during enumeration.
             while (_activeIds.Count > 0)
             {
                 ReleaseInternal(_activeIds[_activeIds.Count - 1], force: true);
@@ -111,8 +123,6 @@ namespace StickerFwk.Infrastructure.Camera
             }
         }
 
-        // Use DestroyImmediate in EditMode (e.g. tests) so cleanup is synchronous; use Destroy
-        // in PlayMode so it follows Unity's normal deferred-destroy lifecycle.
         static void DestroyGameObject(GameObject go)
         {
             if (go == null)
@@ -165,6 +175,7 @@ namespace StickerFwk.Infrastructure.Camera
             }
 
             Log.Info($"[CameraProfileService] Popped profile '{profileId}'. Active profiles: {_activeIds.Count}.");
+            Recompute();
             _appliedPublisher.Publish(new CameraProfileAppliedEvent(profileId, false));
         }
 
@@ -185,8 +196,6 @@ namespace StickerFwk.Infrastructure.Camera
                 RefCount = 1,
             };
             _cameraService.Register(def.Id, camera);
-            // Activation handled by CameraUsageService.Recompute() (driven by profile-applied event).
-            camera.gameObject.SetActive(def.ActivationPolicy == CameraActivationPolicy.AlwaysOn);
         }
 
         void ReleaseCamera(CameraId id)
@@ -209,6 +218,75 @@ namespace StickerFwk.Infrastructure.Camera
             {
                 DestroyGameObject(entry.Camera.gameObject);
             }
+        }
+
+        // Apply enabled state to every registered camera and rebuild the winning base's stack.
+        // Driven by every push/pop — no per-frame work, no event subscriptions.
+        void Recompute()
+        {
+            _slotBuffer.Clear();
+            foreach (var kvp in _cameras)
+            {
+                var def = kvp.Value.Definition;
+                _slotBuffer.Add(new CameraSlot(def.Id, def.RenderType, def.Depth));
+            }
+
+            var result = CameraStackResolver.Resolve(_slotBuffer, _enabledBuffer, _stackBuffer);
+
+            foreach (var kvp in _cameras)
+            {
+                var camera = kvp.Value.Camera;
+                if (camera == null)
+                {
+                    continue;
+                }
+                var shouldBeEnabled = Contains(_enabledBuffer, kvp.Key);
+                if (camera.gameObject.activeSelf != shouldBeEnabled)
+                {
+                    camera.gameObject.SetActive(shouldBeEnabled);
+                }
+                if (camera.enabled != shouldBeEnabled)
+                {
+                    camera.enabled = shouldBeEnabled;
+                }
+            }
+
+            if (!result.HasBase)
+            {
+                return;
+            }
+
+            if (!_cameras.TryGetValue(result.WinningBase, out var baseEntry) || baseEntry.Camera == null)
+            {
+                return;
+            }
+
+            var baseUrp = baseEntry.Camera.GetComponent<UniversalAdditionalCameraData>();
+            if (baseUrp == null)
+            {
+                return;
+            }
+
+            baseUrp.cameraStack.Clear();
+            for (var i = 0; i < _stackBuffer.Count; i++)
+            {
+                if (_cameras.TryGetValue(_stackBuffer[i], out var overlayEntry) && overlayEntry.Camera != null)
+                {
+                    baseUrp.cameraStack.Add(overlayEntry.Camera);
+                }
+            }
+        }
+
+        static bool Contains(List<CameraId> list, CameraId id)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (list[i] == id)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         void EnsureRoot()

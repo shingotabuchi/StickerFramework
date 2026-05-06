@@ -1,13 +1,11 @@
-using System;
 using StickerFwk.Core;
 using UnityEngine;
 using VContainer;
 
 namespace StickerFwk.Core.UI
 {
-    // TEMPORARY (Step 4 stop-gap): binds a scene-authored Canvas to a script-created camera
-    // and holds a usage lease so the camera stays enabled. To be removed in Step 7 when the
-    // gameplay UI moves to an Addressable framework window.
+    // TEMPORARY (Step 4 stop-gap): binds a scene-authored Canvas to a script-created camera.
+    // To be removed in Step 7 when the gameplay UI moves to an Addressable framework window.
     [RequireComponent(typeof(Canvas))]
     public class CanvasCameraBinder : MonoBehaviour
     {
@@ -15,7 +13,6 @@ namespace StickerFwk.Core.UI
         [SerializeField] float _planeDistance = 10f;
 
         Canvas _canvas;
-        IDisposable _lease;
 
         void Awake()
         {
@@ -23,15 +20,12 @@ namespace StickerFwk.Core.UI
         }
 
         [Inject]
-        public void Construct(ICameraService cameraService, ICameraUsageService usageService)
+        public void Construct(ICameraService cameraService)
         {
             if (_canvas == null)
             {
                 _canvas = GetComponent<Canvas>();
             }
-
-            // Acquire first so the target camera is guaranteed active before we bind to it.
-            _lease = usageService.Acquire(_cameraId);
 
             if (cameraService.TryGetCamera(_cameraId, out var camera) && camera != null)
             {
@@ -43,12 +37,6 @@ namespace StickerFwk.Core.UI
             {
                 Log.Warning($"[CanvasCameraBinder] Camera '{_cameraId}' not registered when binding canvas '{name}'.");
             }
-        }
-
-        void OnDestroy()
-        {
-            _lease?.Dispose();
-            _lease = null;
         }
     }
 }

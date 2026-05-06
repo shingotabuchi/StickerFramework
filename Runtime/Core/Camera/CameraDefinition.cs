@@ -21,7 +21,6 @@ namespace StickerFwk.Core
         [SerializeField] bool _postProcessingEnabled;
         [SerializeField] int _rendererIndex = -1;
         [SerializeField] LayerMask _volumeMask = ~0;
-        [SerializeField] CameraActivationPolicy _activationPolicy = CameraActivationPolicy.OnUsage;
 
         public CameraId Id => _id;
         public string DisplayName => string.IsNullOrEmpty(_displayName) ? _id.ToString() : _displayName;
@@ -37,6 +36,5 @@ namespace StickerFwk.Core
         public bool PostProcessingEnabled => _postProcessingEnabled;
         public int RendererIndex => _rendererIndex;
         public LayerMask VolumeMask => _volumeMask;
-        public CameraActivationPolicy ActivationPolicy => _activationPolicy;
     }
 }

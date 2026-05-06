@@ -7,28 +7,25 @@ namespace StickerFwk.Core
     public readonly struct CameraSlot
     {
         public readonly CameraId Id;
-        public readonly UnityEngine.Rendering.Universal.CameraRenderType RenderType;
         public readonly float Depth;
 
-        public CameraSlot(
-            CameraId id,
-            UnityEngine.Rendering.Universal.CameraRenderType renderType,
-            float depth)
+        public CameraSlot(CameraId id, float depth)
         {
             Id = id;
-            RenderType = renderType;
             Depth = depth;
         }
     }
 
-    // Decides which cameras render and how the base camera's overlay stack is composed.
+    // Decides which camera is the Base and how the Base's overlay stack is composed.
     //
     // Rules:
     //   1. Every slot supplied is "wanted" (slots come from active profiles only — there is no
     //      additional gate like mode or lease).
-    //   2. Among wanted Base slots, the lowest-depth one wins. Other Base slots are forced off.
-    //      Only one base camera may render at a time.
-    //   3. The winner's overlay stack = all wanted Overlay slots, sorted by depth ascending.
+    //   2. The lowest-depth slot becomes the Base. All other slots become Overlays.
+    //   3. Overlays are sorted by depth ascending and inserted into the Base's stack.
+    //
+    // The Base/Overlay role is therefore implicit in the depth ordering — there is no per-camera
+    // "render type" authored in CameraSystemSettings.
     //
     // Results are written into caller-provided buffers (avoid per-frame allocations).
     public static class CameraStackResolver
@@ -55,36 +52,33 @@ namespace StickerFwk.Core
             outEnabled.Clear();
             outStack.Clear();
 
-            var hasBase = false;
-            CameraId winningBase = default;
-            var winningBaseDepth = float.PositiveInfinity;
-
-            for (var i = 0; i < slots.Count; i++)
+            if (slots.Count == 0)
             {
-                var s = slots[i];
-                if (s.RenderType != UnityEngine.Rendering.Universal.CameraRenderType.Base)
+                return new Result(false, default);
+            }
+
+            var winningIndex = 0;
+            var winningDepth = slots[0].Depth;
+            for (var i = 1; i < slots.Count; i++)
+            {
+                if (slots[i].Depth < winningDepth)
                 {
-                    continue;
-                }
-                if (!hasBase || s.Depth < winningBaseDepth)
-                {
-                    hasBase = true;
-                    winningBase = s.Id;
-                    winningBaseDepth = s.Depth;
+                    winningDepth = slots[i].Depth;
+                    winningIndex = i;
                 }
             }
 
+            var winningBase = slots[winningIndex].Id;
+            outEnabled.Add(winningBase);
+
             for (var i = 0; i < slots.Count; i++)
             {
-                var s = slots[i];
-                if (s.RenderType == UnityEngine.Rendering.Universal.CameraRenderType.Base)
+                if (i == winningIndex)
                 {
-                    if (hasBase && s.Id.Equals(winningBase))
-                    {
-                        outEnabled.Add(s.Id);
-                    }
                     continue;
                 }
+
+                var s = slots[i];
                 outEnabled.Add(s.Id);
 
                 // Insertion-sort overlays by depth ascending. Overlay counts are tiny in practice,
@@ -98,7 +92,7 @@ namespace StickerFwk.Core
                 outStack.Insert(insertAt, s.Id);
             }
 
-            return new Result(hasBase, winningBase);
+            return new Result(true, winningBase);
         }
 
         static float FindDepth(IReadOnlyList<CameraSlot> slots, CameraId id)

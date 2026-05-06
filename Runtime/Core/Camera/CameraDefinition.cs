@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 namespace StickerFwk.Core
 {
@@ -9,7 +8,6 @@ namespace StickerFwk.Core
     {
         [SerializeField] CameraId _id = CameraId.World;
         [SerializeField] string _displayName;
-        [SerializeField] CameraRenderType _renderType = CameraRenderType.Base;
         [SerializeField] LayerMask _cullingMask = ~0;
         [SerializeField] CameraClearFlags _clearFlags = CameraClearFlags.SolidColor;
         [SerializeField] Color _backgroundColor = Color.black;
@@ -24,7 +22,6 @@ namespace StickerFwk.Core
 
         public CameraId Id => _id;
         public string DisplayName => string.IsNullOrEmpty(_displayName) ? _id.ToString() : _displayName;
-        public CameraRenderType RenderType => _renderType;
         public LayerMask CullingMask => _cullingMask;
         public CameraClearFlags ClearFlags => _clearFlags;
         public Color BackgroundColor => _backgroundColor;

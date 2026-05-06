@@ -224,10 +224,39 @@ namespace StickerFwk.Infrastructure.Camera
             foreach (var kvp in _cameras)
             {
                 var def = kvp.Value.Definition;
-                _slotBuffer.Add(new CameraSlot(def.Id, def.RenderType, def.Depth));
+                _slotBuffer.Add(new CameraSlot(def.Id, def.Depth));
             }
 
             var result = CameraStackResolver.Resolve(_slotBuffer, _enabledBuffer, _stackBuffer);
+
+            // Assign URP render type per camera based on the resolved role:
+            // the winning camera is Base, all others are Overlay. Set this BEFORE rebuilding the
+            // base's cameraStack, since URP only accepts Overlay-typed cameras in the stack.
+            foreach (var kvp in _cameras)
+            {
+                var camera = kvp.Value.Camera;
+                if (camera == null)
+                {
+                    continue;
+                }
+                var urp = camera.GetComponent<UniversalAdditionalCameraData>();
+                if (urp == null)
+                {
+                    continue;
+                }
+                var desiredType = result.HasBase && kvp.Key == result.WinningBase
+                    ? CameraRenderType.Base
+                    : CameraRenderType.Overlay;
+                if (urp.renderType != desiredType)
+                {
+                    // Clear stack before demoting a base to overlay (URP forbids stacks on overlays).
+                    if (desiredType == CameraRenderType.Overlay && urp.cameraStack != null && urp.cameraStack.Count > 0)
+                    {
+                        urp.cameraStack.Clear();
+                    }
+                    urp.renderType = desiredType;
+                }
+            }
 
             foreach (var kvp in _cameras)
             {

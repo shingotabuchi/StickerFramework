@@ -32,7 +32,6 @@ namespace StickerFwk.Infrastructure.Camera
             camera.depth = definition.Depth;
 
             var urp = go.AddComponent<UniversalAdditionalCameraData>();
-            urp.renderType = definition.RenderType;
             urp.renderPostProcessing = definition.PostProcessingEnabled;
             urp.SetRenderer(definition.RendererIndex);
             urp.volumeLayerMask = definition.VolumeMask;

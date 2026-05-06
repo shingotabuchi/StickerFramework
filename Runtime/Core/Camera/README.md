@@ -10,7 +10,7 @@ The activation model is intentionally minimal: **push a profile and every camera
 A small enum identifying every camera role used in the project (`Background`, `World`, `UI`, `WorldOverlay`, `UIOverlay`, `Wipe`). Adding a new role = add an enum entry + reference it from a profile.
 
 ### `CameraDefinition`
-A serialized blob describing one camera: `CameraId`, render type (`Base` / `Overlay`), depth, culling mask, clear flags, etc. Depth determines stack order; render type determines whether a camera draws its own frame (Base) or is composited into a Base's stack (Overlay). Definitions live in `CameraSystemSettings._cameraDefinitions` — there is exactly one definition per `CameraId` for the whole project, and profiles only reference cameras by id.
+A serialized blob describing one camera: `CameraId`, depth, culling mask, clear flags, etc. Depth determines both stack order **and** Base/Overlay role: among all currently-active cameras the one with the lowest depth becomes the Base; every other camera becomes an Overlay in the Base's stack, sorted by depth ascending. Definitions live in `CameraSystemSettings._cameraDefinitions` — there is exactly one definition per `CameraId` for the whole project, and profiles only reference cameras by id.
 
 ### `CameraProfile` (ScriptableObject)
 A list of `CameraId`s plus a `CameraProfileId`. Profiles are the unit of push/pop. They do not carry per-camera settings — those are owned by `CameraSystemSettings`.
@@ -19,7 +19,8 @@ A list of `CameraId`s plus a `CameraProfileId`. Profiles are the unit of push/po
 The catalogue of all profiles (`_profiles`) **and** all per-camera settings (`_cameraDefinitions`) in the project. Referenced by `RootLifetimeScope`. `OnValidate` warns (does not throw) when two `CameraDefinition` entries share a `CameraId`.
 
 ### `CameraProfileId`
-- `Root` — minimal always-pushed profile. References `Background` and `Wipe`. Pushed by `RootLifetimeScope` on app start so transitions can happen even when no scene is loaded.
+- `Root` — minimal always-pushed profile. References `Wipe`. Pushed by `RootLifetimeScope` on app start so transitions can happen even when no scene is loaded.
+- `BackgroundOnly` — pushed when no gameplay scene is active so `Background` becomes the Base. Popped before pushing a profile that owns its own Base camera (e.g. `Gameplay`).
 - `Gameplay` — gameplay scene profile. References `World`, `UI`, `WorldOverlay`, `UIOverlay`. Pushed by `StickerGameLifetimeScope` while the game scene is active.
 
 ## Service
@@ -39,27 +40,26 @@ Refcount-based at two levels:
 
 ## Resolution
 
-After every Push/Pop, `CameraProfileService.Recompute()` builds a `CameraSlot` (id, render type, depth) for every currently registered camera and hands the list to `CameraStackResolver.Resolve(...)`:
+After every Push/Pop, `CameraProfileService.Recompute()` builds a `CameraSlot` (id, depth) for every currently registered camera and hands the list to `CameraStackResolver.Resolve(...)`:
 
-1. **Pick winning base.** Among Base-type slots, the one with the **lowest depth** wins.
-2. **Build enabled set + stack.** All slots are enabled. Overlay slots are sorted by depth ascending and replace the winning Base's `cameraStack`.
-3. **Apply.** Set `gameObject.activeSelf` and `Camera.enabled` per camera (winning base on, losing bases off, all overlays on).
+1. **Pick winning base.** The slot with the **lowest depth** wins the Base role.
+2. **Build enabled set + stack.** All slots are enabled. Non-base slots are sorted by depth ascending and become the winning Base's `cameraStack`.
+3. **Apply.** Set `UniversalAdditionalCameraData.renderType` per camera (Base for the winner, Overlay for the rest), then set `gameObject.activeSelf` and `Camera.enabled`.
 
-Only **one Base camera renders at a time** — losing Bases are forced off. This is what makes the `Background` ↔ `World` handoff work: while only `Root` is active, `Background` is the winning base; once `Gameplay` is also pushed, `World` (depth=-1) beats `Background` (depth=100) and `Background` is disabled. When `Gameplay` is popped, `Background` becomes the winner again.
+The Base/Overlay role is **derived purely from depth** — there is no per-camera marker. To make a camera "the Base while no scene is loaded", give it a low depth and isolate it in its own profile (e.g. `BackgroundOnly`) so it isn't active when a scene's profile (with an even-lower-depth Base, like `World`) is pushed.
 
 ## Lifecycle Walkthrough
 
-Boot (only `Root` pushed):
-- Cameras: `Background`, `Wipe`. Both render. `Background` is the winning base; `Wipe` overlays it.
+Boot (`Root` + `BackgroundOnly` pushed):
+- Cameras: `Wipe`, `Background`. Both render. `Background` (depth=-5) wins the base slot; `Wipe` (depth=2) overlays it.
 
-Game scene loaded (`Gameplay` pushed on top of `Root`):
-- Cameras: `Background`, `Wipe`, `World`, `UI`, `WorldOverlay`, `UIOverlay`. All render.
-- `World` wins the base slot; `Background` is forced off.
+Game scene loaded (`BackgroundOnly` popped, `Gameplay` pushed on top of `Root`):
+- Cameras: `Wipe`, `World`, `UI`, `WorldOverlay`, `UIOverlay`. All render.
+- `World` (depth=-10) wins the base slot.
 - Stack on `World`: `[UI, WorldOverlay, UIOverlay, Wipe]` (sorted by depth ascending).
 
-Game scene unloaded (Gameplay's profile handle disposed):
-- `Gameplay`-only cameras (`World`, `UI`, `WorldOverlay`, `UIOverlay`) destroyed.
-- `Background` becomes the winning base again. `Wipe` still overlays it.
+Game scene unloaded (`Gameplay` popped, `BackgroundOnly` re-pushed):
+- `Gameplay`-only cameras destroyed. `Background` becomes the winning base again.
 
 ## Pushing a profile from a scope
 
@@ -91,10 +91,9 @@ public class MyLifetimeScope : LifetimeScope
 ## Tests
 
 `CameraStackResolver` (pure C#) is the testable core. See `Assets/Tests/EditMode/Camera/CameraStackResolverTests.cs` for:
-- Single profile, single base
-- Multiple bases (lower depth wins, others disabled)
-- Overlay stack sorted by depth
-- No base case
+- Single slot becomes the Base
+- Lowest-depth slot wins the Base role; all others become overlays sorted by depth
+- Empty input → no Base
 - Multi-profile composition (Root → Root+Gameplay handoff)
 
 `CameraProfileService` integration tests (`CameraProfileServiceTests.cs`) cover refcount semantics:

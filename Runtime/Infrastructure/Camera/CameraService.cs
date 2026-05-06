@@ -91,25 +91,6 @@ namespace StickerFwk.Infrastructure.Camera
             return null;
         }
 
-        public UnityEngine.Camera GetCameraForGameObject(GameObject gameObject)
-        {
-            foreach (var kvp in _model.GetAll())
-            {
-                var cam = kvp.Value;
-                if (cam == null || !cam.gameObject.activeInHierarchy)
-                {
-                    continue;
-                }
-
-                if ((cam.cullingMask & (1 << gameObject.layer)) != 0)
-                {
-                    return cam;
-                }
-            }
-
-            return null;
-        }
-
         public IReadOnlyList<CameraId> GetRegisteredIds()
         {
             return _model.GetRegisteredIds();

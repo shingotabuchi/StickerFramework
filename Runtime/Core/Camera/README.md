@@ -10,17 +10,17 @@ The activation model is intentionally minimal: **push a profile and every camera
 A small enum identifying every camera role used in the project (`Background`, `World`, `UI`, `WorldOverlay`, `UIOverlay`, `Wipe`). Adding a new role = add an enum entry + reference it from a profile.
 
 ### `CameraDefinition`
-A serialized blob describing one camera: `CameraId`, render type (`Base` / `Overlay`), depth, culling mask, clear flags, etc. Depth determines stack order; render type determines whether a camera draws its own frame (Base) or is composited into a Base's stack (Overlay).
+A serialized blob describing one camera: `CameraId`, render type (`Base` / `Overlay`), depth, culling mask, clear flags, etc. Depth determines stack order; render type determines whether a camera draws its own frame (Base) or is composited into a Base's stack (Overlay). Definitions live in `CameraSystemSettings._cameraDefinitions` — there is exactly one definition per `CameraId` for the whole project, and profiles only reference cameras by id.
 
 ### `CameraProfile` (ScriptableObject)
-A bundle of `CameraDefinition`s + a `CameraProfileId`. Profiles are the unit of push/pop.
+A list of `CameraId`s plus a `CameraProfileId`. Profiles are the unit of push/pop. They do not carry per-camera settings — those are owned by `CameraSystemSettings`.
 
 ### `CameraSystemSettings` (ScriptableObject)
-The catalogue of all profiles in the project. Referenced by `RootLifetimeScope`.
+The catalogue of all profiles (`_profiles`) **and** all per-camera settings (`_cameraDefinitions`) in the project. Referenced by `RootLifetimeScope`. `OnValidate` warns (does not throw) when two `CameraDefinition` entries share a `CameraId`.
 
 ### `CameraProfileId`
-- `Root` — minimal always-pushed profile. Owns `Background` (Base, depth=100) and `Wipe` (Overlay, depth=2). Pushed by `RootLifetimeScope` on app start so transitions can happen even when no scene is loaded.
-- `Gameplay` — gameplay scene profile. Owns `World` (Base, depth=-1), `UI`, `WorldOverlay`, `UIOverlay`. Pushed by `StickerGameLifetimeScope` while the game scene is active.
+- `Root` — minimal always-pushed profile. References `Background` and `Wipe`. Pushed by `RootLifetimeScope` on app start so transitions can happen even when no scene is loaded.
+- `Gameplay` — gameplay scene profile. References `World`, `UI`, `WorldOverlay`, `UIOverlay`. Pushed by `StickerGameLifetimeScope` while the game scene is active.
 
 ## Service
 
@@ -34,8 +34,8 @@ IReadOnlyCollection<CameraProfileId> ActiveProfiles { get; }
 
 Refcount-based at two levels:
 
-1. **Per-profile refcount.** `Push(id)` increments. `Lease.Dispose()` decrements. The first push of a profile materialises its cameras; the last release tears them down.
-2. **Per-camera refcount.** When two active profiles both declare the same `CameraId`, the camera is created once and survives until **both** profiles release. The first profile's `CameraDefinition` wins (subsequent declarations are silently treated as a refcount bump).
+1. **Per-profile refcount.** `Push(id)` increments and returns an `IDisposable` profile handle. Disposing the handle decrements. The first push of a profile materialises its cameras; the last release tears them down.
+2. **Per-camera refcount.** When two active profiles both reference the same `CameraId`, the camera is created once and survives until **both** profiles release. Both profiles share the single `CameraDefinition` registered in `CameraSystemSettings`.
 
 ## Resolution
 
@@ -57,7 +57,7 @@ Game scene loaded (`Gameplay` pushed on top of `Root`):
 - `World` wins the base slot; `Background` is forced off.
 - Stack on `World`: `[UI, WorldOverlay, UIOverlay, Wipe]` (sorted by depth ascending).
 
-Game scene unloaded (Gameplay's lease disposed):
+Game scene unloaded (Gameplay's profile handle disposed):
 - `Gameplay`-only cameras (`World`, `UI`, `WorldOverlay`, `UIOverlay`) destroyed.
 - `Background` becomes the winning base again. `Wipe` still overlays it.
 
@@ -67,13 +67,13 @@ Game scene unloaded (Gameplay's lease disposed):
 public class MyLifetimeScope : LifetimeScope
 {
     [SerializeField] CameraProfileId _cameraProfileId;
-    System.IDisposable _cameraProfileLease;
+    System.IDisposable _cameraProfileHandle;
 
     protected override void Configure(IContainerBuilder builder)
     {
         builder.RegisterBuildCallback(container =>
         {
-            _cameraProfileLease = container
+            _cameraProfileHandle = container
                 .Resolve<ICameraProfileService>()
                 .Push(_cameraProfileId);
         });
@@ -82,8 +82,8 @@ public class MyLifetimeScope : LifetimeScope
     protected override void OnDestroy()
     {
         base.OnDestroy();
-        _cameraProfileLease?.Dispose();
-        _cameraProfileLease = null;
+        _cameraProfileHandle?.Dispose();
+        _cameraProfileHandle = null;
     }
 }
 ```

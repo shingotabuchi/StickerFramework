@@ -1,6 +1,4 @@
-using StickerFwk.Core;
-
-namespace StickerFwk.Infrastructure.Camera
+namespace StickerFwk.Core
 {
     public readonly struct CameraRegisteredEvent
     {

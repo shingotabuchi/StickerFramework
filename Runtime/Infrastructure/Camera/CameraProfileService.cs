@@ -70,7 +70,7 @@ namespace StickerFwk.Infrastructure.Camera
             {
                 entry.RefCount++;
                 _profiles[profileId] = entry;
-                return new Lease(this, profileId);
+                return new ProfileHandle(this, profileId);
             }
 
             if (!_settings.TryGetProfile(profileId, out var profile))
@@ -84,10 +84,11 @@ namespace StickerFwk.Infrastructure.Camera
 
             for (var i = 0; i < profile.Cameras.Count; i++)
             {
-                var def = profile.Cameras[i];
-                if (def == null)
+                var id = profile.Cameras[i];
+                if (!_settings.TryGetDefinition(id, out var def))
                 {
-                    continue;
+                    throw new InvalidOperationException(
+                        $"[CameraProfileService] Profile '{profileId}' references CameraId '{id}' but no definition exists in CameraSystemSettings.");
                 }
                 AcquireCamera(def);
             }
@@ -99,7 +100,7 @@ namespace StickerFwk.Infrastructure.Camera
             Recompute();
             _appliedPublisher.Publish(new CameraProfileAppliedEvent(profileId, true));
 
-            return new Lease(this, profileId);
+            return new ProfileHandle(this, profileId);
         }
 
         public void Dispose()
@@ -166,12 +167,7 @@ namespace StickerFwk.Infrastructure.Camera
 
             for (var i = 0; i < entry.Profile.Cameras.Count; i++)
             {
-                var def = entry.Profile.Cameras[i];
-                if (def == null)
-                {
-                    continue;
-                }
-                ReleaseCamera(def.Id);
+                ReleaseCamera(entry.Profile.Cameras[i]);
             }
 
             Log.Info($"[CameraProfileService] Popped profile '{profileId}'. Active profiles: {_activeIds.Count}.");
@@ -297,7 +293,10 @@ namespace StickerFwk.Infrastructure.Camera
             }
 
             var go = new GameObject(_settings.CameraRootName);
-            UnityEngine.Object.DontDestroyOnLoad(go);
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.DontDestroyOnLoad(go);
+            }
             _root = go.transform;
             _factory = new CameraFactory(_root);
         }
@@ -311,7 +310,10 @@ namespace StickerFwk.Infrastructure.Camera
 
             _audioListener = new GameObject(_settings.AudioListenerName);
             _audioListener.AddComponent<AudioListener>();
-            UnityEngine.Object.DontDestroyOnLoad(_audioListener);
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.DontDestroyOnLoad(_audioListener);
+            }
         }
 
         struct ProfileEntry
@@ -327,13 +329,13 @@ namespace StickerFwk.Infrastructure.Camera
             public int RefCount;
         }
 
-        sealed class Lease : IDisposable
+        sealed class ProfileHandle : IDisposable
         {
             CameraProfileService _service;
             readonly CameraProfileId _id;
             bool _disposed;
 
-            public Lease(CameraProfileService service, CameraProfileId id)
+            public ProfileHandle(CameraProfileService service, CameraProfileId id)
             {
                 _service = service;
                 _id = id;

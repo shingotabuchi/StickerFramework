@@ -82,8 +82,9 @@ Use presenters for view-specific logic such as MessagePipe/R3 subscriptions, UI 
 
 ### Camera System (`Core/Camera/`)
 
-- `ICameraService` — Register/unregister cameras by `CameraId`. Query by ID, layer mask, or GameObject.
-- `ManagedCamera` — MonoBehaviour that auto-registers on Awake, auto-unregisters on Destroy.
+- `ICameraService` — Register/unregister cameras by `CameraId`. Query by ID or layer-mask via `GetCameraForRenderer`.
+- `ICameraProfileService` — Push/pop `CameraProfile`s; framework owns camera lifetime.
+- `ManagedCamera` — Legacy MonoBehaviour kept only for non-migrated viewer/test scenes (StageViewer, BlurTest). Migrated scenes do not contain `Camera` components; cameras come from `CameraProfile` push/pop.
 
 ### Time System (`Core/Time/`)
 

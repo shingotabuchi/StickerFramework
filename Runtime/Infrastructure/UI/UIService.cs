@@ -29,6 +29,7 @@ namespace StickerFwk.Infrastructure.UI
             IAssetRequester assetRequester,
             IObjectResolver resolver,
             ICameraService cameraService,
+            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher)
         {
@@ -36,7 +37,7 @@ namespace StickerFwk.Infrastructure.UI
             _resolver = resolver;
             _windowOpenedPublisher = windowOpenedPublisher;
             _windowClosedPublisher = windowClosedPublisher;
-            _layerManager = new UILayerManager(cameraService);
+            _layerManager = new UILayerManager(cameraService, cameraRegisteredSubscriber);
             _stacks = new Dictionary<UILayer, Stack<WindowHandle>>();
 
             foreach (var layer in AllLayers) _stacks[layer] = new Stack<WindowHandle>();

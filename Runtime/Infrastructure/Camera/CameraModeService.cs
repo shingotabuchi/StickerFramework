@@ -25,6 +25,13 @@ namespace StickerFwk.Infrastructure.Camera
 
         public bool ModeIncludes(CameraMode mode, CameraId id)
         {
+            // Background is the always-available fallback base camera (declared by the Root
+            // profile). It must be permitted in every mode so the screen never goes blank.
+            if (id == CameraId.Background)
+            {
+                return true;
+            }
+
             switch (mode)
             {
                 case CameraMode.Gameplay:

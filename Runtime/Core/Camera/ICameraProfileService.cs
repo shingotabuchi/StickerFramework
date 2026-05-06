@@ -1,13 +1,13 @@
-using StickerFwk.Core;
+using System;
+using System.Collections.Generic;
 
 namespace StickerFwk.Core
 {
     public interface ICameraProfileService
     {
-        bool IsApplied { get; }
-        CameraProfileId? ActiveProfileId { get; }
-        CameraProfile ActiveProfile { get; }
-        void Apply(CameraProfileId profileId);
-        void Release();
+        IDisposable Push(CameraProfileId profileId);
+        bool IsActive(CameraProfileId profileId);
+        bool TryGetDefinition(CameraId cameraId, out CameraDefinition definition);
+        IReadOnlyCollection<CameraProfileId> ActiveProfiles { get; }
     }
 }

@@ -20,6 +20,7 @@ namespace StickerFwk.Infrastructure.UI
         private readonly IAssetRequester _assetRequester;
         private readonly UILayerManager _layerManager;
         private readonly IObjectResolver _resolver;
+        private readonly ICameraUsageService _cameraUsageService;
         private readonly Dictionary<UILayer, Stack<WindowHandle>> _stacks;
         private readonly IPublisher<WindowClosedEvent> _windowClosedPublisher;
         private readonly IPublisher<WindowOpenedEvent> _windowOpenedPublisher;
@@ -28,14 +29,17 @@ namespace StickerFwk.Infrastructure.UI
         public UIService(
             IAssetRequester assetRequester,
             IObjectResolver resolver,
+            ICameraService cameraService,
+            ICameraUsageService cameraUsageService,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
+            _cameraUsageService = cameraUsageService;
             _windowOpenedPublisher = windowOpenedPublisher;
             _windowClosedPublisher = windowClosedPublisher;
-            _layerManager = new UILayerManager();
+            _layerManager = new UILayerManager(cameraService);
             _stacks = new Dictionary<UILayer, Stack<WindowHandle>>();
 
             foreach (var layer in AllLayers) _stacks[layer] = new Stack<WindowHandle>();
@@ -216,6 +220,19 @@ namespace StickerFwk.Infrastructure.UI
             var showTransType = options?.ShowTransition ?? prefabWindow.ShowTransition;
             var transDuration = options?.TransitionDuration ?? prefabWindow.TransitionDuration;
 
+            // Layer canvases are created on demand and bound to the target camera. If the camera
+            // profile is not yet applied, fail fast: the caller should ensure the profile is ready
+            // (e.g. via RootLifetimeScope.Apply) before any UI push.
+            if (!_layerManager.TryEnsureLayer(layer, out var ensureError))
+            {
+                Log.Error("UIService", $"Cannot push '{key}': {ensureError}");
+                assetHandle.Dispose();
+                return null;
+            }
+
+            // Acquire one camera-usage lease per window. Released when the window is popped.
+            var cameraLease = _cameraUsageService.Acquire(UILayerManager.LayerToCameraId(layer));
+
             var stack = _stacks[layer];
             if (stack.Count == 0)
             {
@@ -244,7 +261,7 @@ namespace StickerFwk.Infrastructure.UI
             var windowView = instance.GetComponent<WindowView>();
             await windowView.OnInitialize(ct);
 
-            var windowHandle = new WindowHandle(key, windowView, blocker, layer, assetHandle);
+            var windowHandle = new WindowHandle(key, windowView, blocker, layer, assetHandle, cameraLease);
             stack.Push(windowHandle);
 
             windowView.OnBeforeShow();

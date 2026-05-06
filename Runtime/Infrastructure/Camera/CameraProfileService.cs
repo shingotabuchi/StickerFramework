@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using MessagePipe;
 using StickerFwk.Core;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 namespace StickerFwk.Infrastructure.Camera
 {
@@ -12,12 +11,14 @@ namespace StickerFwk.Infrastructure.Camera
         readonly CameraSystemSettings _settings;
         readonly ICameraService _cameraService;
         readonly IPublisher<CameraProfileAppliedEvent> _appliedPublisher;
-        readonly List<UnityEngine.Camera> _createdCameras = new List<UnityEngine.Camera>();
+
+        readonly Dictionary<CameraProfileId, ProfileEntry> _profiles = new Dictionary<CameraProfileId, ProfileEntry>();
+        readonly Dictionary<CameraId, CameraEntry> _cameras = new Dictionary<CameraId, CameraEntry>();
+        readonly List<CameraProfileId> _activeIds = new List<CameraProfileId>();
+
         CameraFactory _factory;
         Transform _root;
         GameObject _audioListener;
-        CameraProfile _active;
-        CameraProfileId? _activeId;
 
         public CameraProfileService(
             CameraSystemSettings settings,
@@ -29,26 +30,35 @@ namespace StickerFwk.Infrastructure.Camera
             _appliedPublisher = appliedPublisher;
         }
 
-        public bool IsApplied => _active != null;
-        public CameraProfileId? ActiveProfileId => _activeId;
-        public CameraProfile ActiveProfile => _active;
+        public IReadOnlyCollection<CameraProfileId> ActiveProfiles => _activeIds;
 
-        public void Apply(CameraProfileId profileId)
+        public bool IsActive(CameraProfileId profileId) => _profiles.ContainsKey(profileId);
+
+        public bool TryGetDefinition(CameraId cameraId, out CameraDefinition definition)
+        {
+            if (_cameras.TryGetValue(cameraId, out var entry))
+            {
+                definition = entry.Definition;
+                return true;
+            }
+
+            definition = null;
+            return false;
+        }
+
+        public IDisposable Push(CameraProfileId profileId)
         {
             if (_settings == null)
             {
                 throw new InvalidOperationException(
-                    "[CameraProfileService] CameraSystemSettings is not assigned on RootLifetimeScope.");
+                    "[CameraProfileService] CameraSystemSettings is not assigned.");
             }
 
-            if (_active != null && _activeId == profileId)
+            if (_profiles.TryGetValue(profileId, out var entry))
             {
-                return;
-            }
-
-            if (_active != null)
-            {
-                Release();
+                entry.RefCount++;
+                _profiles[profileId] = entry;
+                return new Lease(this, profileId);
             }
 
             if (!_settings.TryGetProfile(profileId, out var profile))
@@ -67,73 +77,137 @@ namespace StickerFwk.Infrastructure.Camera
                 {
                     continue;
                 }
-
-                var camera = _factory.Create(def);
-                _createdCameras.Add(camera);
-                _cameraService.Register(def.Id, camera);
-
-                camera.gameObject.SetActive(def.ActivationPolicy == CameraActivationPolicy.AlwaysOn);
+                AcquireCamera(def);
             }
 
-            ApplyDefaultStack(profile);
+            _profiles[profileId] = new ProfileEntry { Profile = profile, RefCount = 1 };
+            _activeIds.Add(profileId);
 
-            _active = profile;
-            _activeId = profileId;
-            Log.Info($"[CameraProfileService] Applied profile '{profileId}' with {_createdCameras.Count} camera(s).");
+            Log.Info($"[CameraProfileService] Pushed profile '{profileId}'. Active profiles: {_activeIds.Count}.");
             _appliedPublisher.Publish(new CameraProfileAppliedEvent(profileId, true));
-        }
 
-        public void Release()
-        {
-            if (_active == null)
-            {
-                return;
-            }
-
-            var releasedId = _activeId;
-
-            for (var i = 0; i < _active.Cameras.Count; i++)
-            {
-                var def = _active.Cameras[i];
-                if (def != null)
-                {
-                    _cameraService.Unregister(def.Id);
-                }
-            }
-
-            for (var i = 0; i < _createdCameras.Count; i++)
-            {
-                if (_createdCameras[i] != null)
-                {
-                    UnityEngine.Object.Destroy(_createdCameras[i].gameObject);
-                }
-            }
-            _createdCameras.Clear();
-
-            _active = null;
-            _activeId = null;
-
-            if (releasedId.HasValue)
-            {
-                _appliedPublisher.Publish(new CameraProfileAppliedEvent(releasedId.Value, false));
-            }
+            return new Lease(this, profileId);
         }
 
         public void Dispose()
         {
-            Release();
+            // Pop all active profiles. Iterate by index to avoid mutating during enumeration.
+            while (_activeIds.Count > 0)
+            {
+                ReleaseInternal(_activeIds[_activeIds.Count - 1], force: true);
+            }
 
             if (_audioListener != null)
             {
-                UnityEngine.Object.Destroy(_audioListener);
+                DestroyGameObject(_audioListener);
                 _audioListener = null;
             }
 
             if (_root != null)
             {
-                UnityEngine.Object.Destroy(_root.gameObject);
+                DestroyGameObject(_root.gameObject);
                 _root = null;
                 _factory = null;
+            }
+        }
+
+        // Use DestroyImmediate in EditMode (e.g. tests) so cleanup is synchronous; use Destroy
+        // in PlayMode so it follows Unity's normal deferred-destroy lifecycle.
+        static void DestroyGameObject(GameObject go)
+        {
+            if (go == null)
+            {
+                return;
+            }
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(go);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        void Pop(CameraProfileId profileId)
+        {
+            ReleaseInternal(profileId, force: false);
+        }
+
+        void ReleaseInternal(CameraProfileId profileId, bool force)
+        {
+            if (!_profiles.TryGetValue(profileId, out var entry))
+            {
+                return;
+            }
+
+            if (!force)
+            {
+                entry.RefCount--;
+                if (entry.RefCount > 0)
+                {
+                    _profiles[profileId] = entry;
+                    return;
+                }
+            }
+
+            _profiles.Remove(profileId);
+            _activeIds.Remove(profileId);
+
+            for (var i = 0; i < entry.Profile.Cameras.Count; i++)
+            {
+                var def = entry.Profile.Cameras[i];
+                if (def == null)
+                {
+                    continue;
+                }
+                ReleaseCamera(def.Id);
+            }
+
+            Log.Info($"[CameraProfileService] Popped profile '{profileId}'. Active profiles: {_activeIds.Count}.");
+            _appliedPublisher.Publish(new CameraProfileAppliedEvent(profileId, false));
+        }
+
+        void AcquireCamera(CameraDefinition def)
+        {
+            if (_cameras.TryGetValue(def.Id, out var entry))
+            {
+                entry.RefCount++;
+                _cameras[def.Id] = entry;
+                return;
+            }
+
+            var camera = _factory.Create(def);
+            _cameras[def.Id] = new CameraEntry
+            {
+                Definition = def,
+                Camera = camera,
+                RefCount = 1,
+            };
+            _cameraService.Register(def.Id, camera);
+            // Activation handled by CameraUsageService.Recompute() (driven by profile-applied event).
+            camera.gameObject.SetActive(def.ActivationPolicy == CameraActivationPolicy.AlwaysOn);
+        }
+
+        void ReleaseCamera(CameraId id)
+        {
+            if (!_cameras.TryGetValue(id, out var entry))
+            {
+                return;
+            }
+
+            entry.RefCount--;
+            if (entry.RefCount > 0)
+            {
+                _cameras[id] = entry;
+                return;
+            }
+
+            _cameras.Remove(id);
+            _cameraService.Unregister(id);
+            if (entry.Camera != null)
+            {
+                DestroyGameObject(entry.Camera.gameObject);
             }
         }
 
@@ -162,27 +236,40 @@ namespace StickerFwk.Infrastructure.Camera
             UnityEngine.Object.DontDestroyOnLoad(_audioListener);
         }
 
-        void ApplyDefaultStack(CameraProfile profile)
+        struct ProfileEntry
         {
-            if (!_cameraService.TryGetCamera(profile.BaseCamera, out var baseCamera) || baseCamera == null)
+            public CameraProfile Profile;
+            public int RefCount;
+        }
+
+        struct CameraEntry
+        {
+            public CameraDefinition Definition;
+            public UnityEngine.Camera Camera;
+            public int RefCount;
+        }
+
+        sealed class Lease : IDisposable
+        {
+            CameraProfileService _service;
+            readonly CameraProfileId _id;
+            bool _disposed;
+
+            public Lease(CameraProfileService service, CameraProfileId id)
             {
-                return;
+                _service = service;
+                _id = id;
             }
 
-            var baseUrp = baseCamera.GetComponent<UniversalAdditionalCameraData>();
-            if (baseUrp == null)
+            public void Dispose()
             {
-                return;
-            }
-
-            baseUrp.cameraStack.Clear();
-            for (var i = 0; i < profile.DefaultStackOrder.Count; i++)
-            {
-                var id = profile.DefaultStackOrder[i];
-                if (_cameraService.TryGetCamera(id, out var overlayCamera) && overlayCamera != null)
+                if (_disposed)
                 {
-                    baseUrp.cameraStack.Add(overlayCamera);
+                    return;
                 }
+                _disposed = true;
+                _service?.Pop(_id);
+                _service = null;
             }
         }
     }

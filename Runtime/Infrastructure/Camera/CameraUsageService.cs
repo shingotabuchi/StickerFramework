@@ -12,6 +12,10 @@ namespace StickerFwk.Infrastructure.Camera
         readonly ICameraModeService _modeService;
         readonly ICameraService _cameraService;
         readonly Dictionary<CameraId, int> _refCounts = new Dictionary<CameraId, int>();
+        readonly List<CameraSlot> _slotBuffer = new List<CameraSlot>();
+        readonly List<CameraId> _enabledBuffer = new List<CameraId>();
+        readonly List<CameraId> _stackBuffer = new List<CameraId>();
+        readonly Func<CameraMode, CameraId, bool> _modeIncludesDelegate;
         readonly IDisposable _profileSubscription;
 
         public CameraUsageService(
@@ -23,6 +27,7 @@ namespace StickerFwk.Infrastructure.Camera
             _profileService = profileService;
             _modeService = modeService;
             _cameraService = cameraService;
+            _modeIncludesDelegate = _modeService.ModeIncludes;
 
             _modeService.ModeChanged += OnModeChanged;
             _profileSubscription = profileAppliedSubscriber.Subscribe(OnProfileApplied);
@@ -77,29 +82,43 @@ namespace StickerFwk.Infrastructure.Camera
 
         void Recompute()
         {
-            var profile = _profileService.ActiveProfile;
-            if (profile == null)
+            var registered = _cameraService.GetRegisteredIds();
+            if (registered == null || registered.Count == 0)
             {
                 return;
             }
 
-            var mode = _modeService.CurrentMode;
-
-            // Step 1: enable/disable each camera based on mode + (lease or AlwaysOn).
-            for (var i = 0; i < profile.Cameras.Count; i++)
+            // Build slot snapshot from the registry + lease counts.
+            _slotBuffer.Clear();
+            for (var i = 0; i < registered.Count; i++)
             {
-                var def = profile.Cameras[i];
-                if (def == null)
+                var id = registered[i];
+                if (!_profileService.TryGetDefinition(id, out var def))
+                {
+                    continue;
+                }
+                _refCounts.TryGetValue(id, out var leaseCount);
+                _slotBuffer.Add(new CameraSlot(id, def.RenderType, def.Depth, def.ActivationPolicy, leaseCount));
+            }
+
+            var result = CameraStackResolver.Resolve(
+                _slotBuffer,
+                _modeService.CurrentMode,
+                _modeIncludesDelegate,
+                _enabledBuffer,
+                _stackBuffer);
+
+            // Apply enabled state. A camera in _enabledBuffer is on; everything else is off
+            // (including losing Bases and unwanted overlays).
+            for (var i = 0; i < registered.Count; i++)
+            {
+                var id = registered[i];
+                if (!_cameraService.TryGetCamera(id, out var camera) || camera == null)
                 {
                     continue;
                 }
 
-                if (!_cameraService.TryGetCamera(def.Id, out var camera) || camera == null)
-                {
-                    continue;
-                }
-
-                var shouldBeEnabled = ShouldEnable(mode, def);
+                var shouldBeEnabled = Contains(_enabledBuffer, id);
                 if (camera.gameObject.activeSelf != shouldBeEnabled)
                 {
                     camera.gameObject.SetActive(shouldBeEnabled);
@@ -110,8 +129,13 @@ namespace StickerFwk.Infrastructure.Camera
                 }
             }
 
-            // Step 2: rebuild base camera stack to contain only enabled overlays in declared order.
-            if (!_cameraService.TryGetCamera(profile.BaseCamera, out var baseCamera) || baseCamera == null)
+            // Rebuild the winning base's overlay stack.
+            if (!result.HasBase)
+            {
+                return;
+            }
+
+            if (!_cameraService.TryGetCamera(result.WinningBase, out var baseCamera) || baseCamera == null)
             {
                 return;
             }
@@ -123,44 +147,25 @@ namespace StickerFwk.Infrastructure.Camera
             }
 
             baseUrp.cameraStack.Clear();
-            for (var i = 0; i < profile.DefaultStackOrder.Count; i++)
+            for (var i = 0; i < _stackBuffer.Count; i++)
             {
-                var id = profile.DefaultStackOrder[i];
-                if (id == profile.BaseCamera)
-                {
-                    continue;
-                }
-
-                if (!profile.TryGetDefinition(id, out var def))
-                {
-                    continue;
-                }
-
-                if (!ShouldEnable(mode, def))
-                {
-                    continue;
-                }
-
-                if (_cameraService.TryGetCamera(id, out var overlay) && overlay != null)
+                if (_cameraService.TryGetCamera(_stackBuffer[i], out var overlay) && overlay != null)
                 {
                     baseUrp.cameraStack.Add(overlay);
                 }
             }
         }
 
-        bool ShouldEnable(CameraMode mode, CameraDefinition def)
+        static bool Contains(List<CameraId> list, CameraId id)
         {
-            if (!_modeService.ModeIncludes(mode, def.Id))
+            for (var i = 0; i < list.Count; i++)
             {
-                return false;
+                if (list[i] == id)
+                {
+                    return true;
+                }
             }
-
-            if (def.ActivationPolicy == CameraActivationPolicy.AlwaysOn)
-            {
-                return true;
-            }
-
-            return _refCounts.TryGetValue(def.Id, out var count) && count > 0;
+            return false;
         }
 
         sealed class Lease : IDisposable

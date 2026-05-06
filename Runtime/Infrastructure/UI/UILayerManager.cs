@@ -8,7 +8,7 @@ using UnityEngine.UI;
 
 namespace StickerFwk.Infrastructure.UI
 {
-    public class UILayerManager
+    public class UILayerManager : IDisposable
     {
         readonly ICameraService _cameraService;
         readonly ISubscriber<CameraRegisteredEvent> _cameraRegisteredSubscriber;

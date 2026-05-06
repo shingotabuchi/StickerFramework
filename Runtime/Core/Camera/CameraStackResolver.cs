@@ -86,15 +86,17 @@ namespace StickerFwk.Core
                     continue;
                 }
                 outEnabled.Add(s.Id);
-                outStack.Add(s.Id);
-            }
 
-            outStack.Sort((a, b) =>
-            {
-                var da = FindDepth(slots, a);
-                var db = FindDepth(slots, b);
-                return da.CompareTo(db);
-            });
+                // Insertion-sort overlays by depth ascending. Overlay counts are tiny in practice,
+                // so this avoids both the closure allocation of List.Sort(Comparison) and the need
+                // for a parallel depth buffer.
+                var insertAt = outStack.Count;
+                while (insertAt > 0 && FindDepth(slots, outStack[insertAt - 1]) > s.Depth)
+                {
+                    insertAt--;
+                }
+                outStack.Insert(insertAt, s.Id);
+            }
 
             return new Result(hasBase, winningBase);
         }

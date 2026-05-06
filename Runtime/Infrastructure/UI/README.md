@@ -1,4 +1,6 @@
-# UI System — Requirements
+# UI System
+
+> Status: current. Documents the UI window stack, layer model, transitions, and the scene-canvas binder. Kept in sync with code in `Runtime/Core/UI/` and `Runtime/Infrastructure/UI/`.
 
 ## Overview
 
@@ -115,3 +117,39 @@ Runtime overrides can be passed via a `WindowOptions` object when calling `UISer
 - `UIService` implements `IStartable` (initializes on app start) and `IDisposable` (cleans up all windows).
 - Feature folder: `Assets/Scripts/Runtime/Features/UI/`.
 - Cross-feature communication via MessagePipe only.
+
+---
+
+## R11: Scene-Authored Canvases (`CanvasCameraBinder`)
+
+`UILayerManager` owns canvases for windows pushed through `IUIService`. For canvases that are **authored in a scene** (boot splash, version label, debug overlay, anything that should be visible before the runtime UI stack is initialised), use `CanvasCameraBinder` instead.
+
+### Behaviour
+
+- In `Awake`, the binder forces `RenderMode.ScreenSpaceOverlay` if no camera is bound, so the canvas is visible from the first frame even before any `CameraProfile` is pushed.
+- On VContainer injection it captures `ICameraService` and subscribes to `CameraRegisteredEvent`. If the target `CameraId` is already registered, it binds immediately.
+- On `CameraRegisteredEvent(IsRegistered: true)` for the configured `CameraId`, the canvas switches to `ScreenSpaceCamera` with `worldCamera` set and the configured `planeDistance` applied. Idempotent — no-ops when the camera reference is unchanged.
+- On `CameraRegisteredEvent(IsRegistered: false)` it reverts to `ScreenSpaceOverlay` and clears `worldCamera`, so the canvas keeps rendering across profile transitions.
+- Disposes its subscription in `OnDestroy`.
+
+### Required wiring
+
+| Concern | Where |
+|---|---|
+| Push a `CameraProfile` that includes the target `CameraId` | `CameraProfileScopeBinding` on the scope's GameObject |
+| Auto-install `IInstaller` MonoBehaviours on a scope | Scope inherits from `StickerLifetimeScope` |
+| Auto-inject scene-authored binders | `builder.RegisterComponentInHierarchy<CanvasCameraBinder>()` in `ConfigureScope` |
+| Provide `ICameraService` + `ISubscriber<CameraRegisteredEvent>` | Registered in `RootLifetimeScope` (parent scope) |
+
+### Layering
+
+The binder does **not** set `Canvas.sortingOrder`. Stack order between camera-rendered canvases is determined by the cameras' `depth` in `CameraSystemSettings._cameraDefinitions`. A binder targeting `CameraId.UI` (depth 20) renders below `CameraId.Wipe` (depth 50), so wipe transitions correctly draw above an authored boot canvas.
+
+### What it deliberately does not do
+
+- Does not parent your canvas under `[UI Root]`. It stays where you authored it.
+- Does not register the canvas with `UIService` / `UILayerManager`. Windows pushed via `IUIService.Push` still go to dynamic layer canvases.
+- Does not toggle `Canvas.enabled`. Use a separate component if you need show/hide on profile transitions instead of overlay fallback.
+- Does not configure `CanvasScaler` or `GraphicRaycaster` — those are authored in-scene.
+
+> Do not pre-assign `Canvas.worldCamera` in the inspector. The binder owns that field and will overwrite it on bind.

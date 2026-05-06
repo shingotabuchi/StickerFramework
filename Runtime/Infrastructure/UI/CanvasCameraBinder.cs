@@ -6,10 +6,22 @@ using VContainer;
 
 namespace StickerFwk.Infrastructure.UI
 {
-    // Binds a scene-authored Canvas to a camera registered with ICameraService.
-    // Starts in ScreenSpaceOverlay so authored UI is visible immediately at boot,
-    // then swaps to ScreenSpaceCamera once the target CameraId is registered. Re-binds
-    // whenever the backing camera is re-registered (e.g. on CameraProfile changes).
+    /// <summary>
+    /// Binds a scene-authored <see cref="Canvas"/> to a camera registered with
+    /// <see cref="ICameraService"/>.
+    /// </summary>
+    /// <remarks>
+    /// Starts in <see cref="RenderMode.ScreenSpaceOverlay"/> so the canvas is visible
+    /// before any <c>CameraProfile</c> is pushed, then swaps to
+    /// <see cref="RenderMode.ScreenSpaceCamera"/> when the configured
+    /// <see cref="CameraId"/> is registered. Reverts to overlay if the camera
+    /// unregisters, and re-binds when it is re-registered (e.g. on profile swaps).
+    /// Idempotent.
+    /// <para>
+    /// See <c>Runtime/Infrastructure/UI/README.md</c> §R11 for required scope wiring
+    /// and layering rules.
+    /// </para>
+    /// </remarks>
     [RequireComponent(typeof(Canvas))]
     public sealed class CanvasCameraBinder : MonoBehaviour
     {

@@ -1,5 +1,7 @@
 # StickerFwk.Core.Debug
 
+> Status: current. Documents the in-game debug menu assembly. Kept in sync with code in `Runtime/Core/Debug/`.
+
 In-game debug menu for the Sticker framework. Modular, VContainer-driven, stripped from release builds.
 
 ## Compilation gating

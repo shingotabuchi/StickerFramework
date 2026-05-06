@@ -1,5 +1,7 @@
 # Camera System
 
+> Status: current. Documents the project-wide camera registration, profiles, and stack resolver. Kept in sync with code in `Runtime/Core/Camera/` and `Runtime/Infrastructure/Camera/`.
+
 The framework camera system manages all cameras in the project from script. Scenes do **not** author cameras; profiles do.
 
 The activation model is intentionally minimal: **push a profile and every camera it declares renders. Pop the profile and they go away.** There is no per-camera lease, no mode flag, no activation policy — the only mechanism for turning cameras on or off is profile push/pop.

@@ -6,6 +6,22 @@ VContainer (DI), UniTask (async), R3 (reactive), and MessagePipe (pub/sub).
 
 ---
 
+## Documentation Index
+
+Subsystem docs live next to their code. Each is the authoritative reference for that subsystem and is marked `Status: current` at the top.
+
+| Doc | Scope |
+|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Layer architecture, asmdef boundaries, dependency rules |
+| [`FEATURE_GUIDE.md`](FEATURE_GUIDE.md) | Scaffolding a new feature (folders, naming, DI wiring) |
+| [`Runtime/Core/Camera/README.md`](Runtime/Core/Camera/README.md) | Camera registration, profiles, stack resolver |
+| [`Runtime/Core/Debug/README.md`](Runtime/Core/Debug/README.md) | `STICKER_DEBUG`-gated in-game debug menu |
+| [`Runtime/Infrastructure/UI/README.md`](Runtime/Infrastructure/UI/README.md) | Window stack, layers, transitions, `CanvasCameraBinder` |
+
+For per-class behaviour, read the XML doc comments on the type — they are the source of truth and surface in IDE tooltips. Markdown docs cover **systems** (multiple types collaborating); they do not replicate per-class API reference.
+
+---
+
 ## 1. Folder Structure
 
 ```

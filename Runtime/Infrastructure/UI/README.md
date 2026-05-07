@@ -65,19 +65,19 @@ Need a Canvas authored in the scene (boot splash, version label, debug overlay)?
 
 ## R5: Transition Animations
 
-- Windows define **show** and **hide** transitions via inspector fields on `WindowView` (`ShowTransition`, `HideTransition`, `TransitionDuration`).
-- Built-in transition types (`TransitionType` enum):
-  - **None** — Instant visibility change
-  - **Fade** — Alpha fade in/out via `CanvasGroup`
-  - **SlideFromLeft / SlideFromRight / SlideFromTop / SlideFromBottom** — Position animation with easing
-  - **Scale** — Scale (0.85→1.0) combined with alpha fade
-  - **Animator** — Plays an Animator state (configured via `ShowAnimatorState` / `HideAnimatorState` fields)
-  - **Timeline** — Plays a `PlayableDirector` timeline (configured via `ShowTimeline` / `HideTimeline` fields)
-- All transitions implement the `ITransition` interface and are created via `TransitionFactory`.
+- Windows define **show** and **hide** transitions via `[SerializeReference] ITransition` fields on `WindowView` (`ShowTransition`, `HideTransition`) plus a shared `TransitionDuration`. The Unity inspector renders a subclass picker so each prefab only shows the fields for its chosen transition.
+- Built-in `ITransition` implementations (all `[Serializable]`, parameterless ctor, in `StickerFwk.Core.UI`):
+  - `NoneTransition` — Instant visibility change
+  - `FadeTransition` — Alpha fade in/out via `CanvasGroup`
+  - `SlideTransition` — Position animation with easing (`Direction` enum field)
+  - `ScaleTransition` — Scale combined with alpha fade (`MinScale` field)
+  - `AnimatorTransition` — Plays an `Animator` state (`ShowState` / `HideState` strings). Resolves the `Animator` from the window's root `GetComponent<Animator>()`; if the animator lives on a child, add an `AnimatorTransitionTargets` component on the root that points at it.
+  - `TimelineTransition` — Plays show/hide `PlayableDirector`s. Requires a sibling `TimelineTransitionTargets` component on the window root that holds the show/hide director references.
+- Custom transitions: implement `ITransition` (parameterless ctor, `[Serializable]`) in any assembly that references `StickerFwk.Core` — Unity's `[SerializeReference]` picker will list it automatically. Note: `[SerializeReference]` data is not remapped to the prefab instance for nested `UnityEngine.Object` references; if your transition needs to reference scene/prefab objects, store those references on a companion `MonoBehaviour` (see `TimelineTransitionTargets`).
 - Async helper extensions: `AnimatorExtensions.PlayAsync()` and `PlayableDirectorExtensions.PlayAsync()`.
 - Transitions are async (`UniTask`-based) and support cancellation.
 - During a transition, input to the transitioning window is disabled.
-- Runtime overrides for transition type and duration are supported via `WindowOptions`.
+- Runtime overrides for transition and duration are supported via `WindowOptions`.
 
 ## R6: Addressable Loading
 
@@ -113,10 +113,8 @@ Each window defines its configuration via inspector fields on the `WindowView` b
 
 - **Layer** (`UILayer`) — Which layer it belongs to.
 - **IsBlocking** (`bool`) — Whether it blocks input behind it (default: `true`).
-- **ShowTransition / HideTransition** (`TransitionType`) — Which transition to use.
+- **ShowTransition / HideTransition** (`[SerializeReference] ITransition`) — Transition strategy instances. Pick a subclass in the inspector; per-strategy fields (Animator state names, Timeline directors, slide direction, etc.) appear inline only for the selected type.
 - **TransitionDuration** (`float`) — Duration of transition animations in seconds.
-- **ShowAnimatorState / HideAnimatorState** (`string`) — Animator state names (for `Animator` transition type).
-- **ShowTimeline / HideTimeline** (`PlayableDirector`) — Timeline references (for `Timeline` transition type).
 
 Runtime overrides can be passed via a `WindowOptions` object when calling `UIService.Push()` or `UIService.Replace()`.
 

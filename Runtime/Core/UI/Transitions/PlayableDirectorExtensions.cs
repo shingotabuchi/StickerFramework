@@ -3,7 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine.Playables;
 
-namespace StickerFwk.Infrastructure.UI
+namespace StickerFwk.Core.UI
 {
     public static class PlayableDirectorExtensions
     {

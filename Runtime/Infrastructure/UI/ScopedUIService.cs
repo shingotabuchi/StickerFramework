@@ -45,24 +45,32 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
-        public async UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
+        public async UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
-            await _inner.Pop(layer, ct);
-            RemoveLastMatch(v => v.Layer == layer);
+            var popped = await _inner.Pop(layer, ct);
+            if (popped)
+            {
+                RemoveLastMatch(v => v.Layer == layer);
+            }
             PruneDead();
+            return popped;
         }
 
-        public async UniTask Pop<T>(CancellationToken ct = default) where T : WindowView
+        public async UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
         {
-            await _inner.Pop<T>(ct);
-            RemoveLastMatch(v => v is T);
+            var popped = await _inner.Pop<T>(ct);
+            if (popped)
+            {
+                RemoveLastMatch(v => v is T);
+            }
             PruneDead();
+            return popped;
         }
 
-        public async UniTask Pop(WindowView view, CancellationToken ct = default)
+        public async UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
         {
-            await _inner.Pop(view, ct);
-            if (view != null)
+            var popped = await _inner.Pop(view, ct);
+            if (popped && view != null)
             {
                 for (var i = _tracked.Count - 1; i >= 0; i--)
                 {
@@ -74,6 +82,7 @@ namespace StickerFwk.Infrastructure.UI
                 }
             }
             PruneDead();
+            return popped;
         }
 
         public async UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
@@ -89,9 +98,9 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
-        public async UniTask PopAll(UILayer layer, CancellationToken ct = default)
+        public async UniTask<int> PopAll(UILayer layer, CancellationToken ct = default)
         {
-            await _inner.PopAll(layer, ct);
+            var popped = await _inner.PopAll(layer, ct);
             for (var i = _tracked.Count - 1; i >= 0; i--)
             {
                 var view = _tracked[i];
@@ -100,6 +109,7 @@ namespace StickerFwk.Infrastructure.UI
                     _tracked.RemoveAt(i);
                 }
             }
+            return popped;
         }
 
         public UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView

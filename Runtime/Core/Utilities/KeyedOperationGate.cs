@@ -5,6 +5,24 @@ using System.Threading;
 
 namespace StickerFwk.Core
 {
+    /// <summary>
+    /// Coalesces concurrent async operations keyed by <typeparamref name="TKey"/>: if an operation
+    /// for a given key is already in flight, subsequent calls await the same task instead of
+    /// starting a new one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Thread-safety:</b> This type is <b>not</b> thread-safe. The internal dictionary is
+    /// accessed without synchronization, so all members must be invoked from a single thread.
+    /// </para>
+    /// <para>
+    /// In typical Unity + UniTask usage this is fine because UniTask continuations resume on the
+    /// Unity main thread (PlayerLoop) by default, so callers that only ever invoke this gate from
+    /// the main thread are safe. If you await operations that resume on a background thread (for
+    /// example via <c>UniTask.SwitchToThreadPool</c>) and then call back into the gate, you must
+    /// switch back to the main thread first, or provide your own synchronization.
+    /// </para>
+    /// </remarks>
     public sealed class KeyedOperationGate<TKey>
     {
         private readonly Dictionary<TKey, UniTaskCompletionSource<bool>> _inflight = new();

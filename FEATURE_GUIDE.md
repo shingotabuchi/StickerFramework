@@ -264,7 +264,7 @@ namespace App.Features.Plinko
 **Prefab setup:**
 1. Create a UI prefab with `PlinkoWindow` component attached
 2. It auto-requires `CanvasGroup` (from `WindowView`)
-3. Configure in Inspector: Layer = `UI` (or `UIOverlay` / `Wipe`), ShowTransition = `Fade`, etc.
+3. Configure in Inspector: Layer = `UI` (or `UIOverlay` / `Wipe`), ShowTransition = `Fade` (or any `ITransition` subclass), etc.
 4. Mark as Addressable with key `Views/PlinkoWindow.prefab`
 
 ### 5. LifetimeScope — DI Registration
@@ -430,7 +430,7 @@ var window = await _uiService.Push<PlinkoWindow>();
 // Push with options
 var window = await _uiService.Push<PlinkoWindow>(options: new WindowOptions
 {
-    ShowTransition = TransitionType.SlideFromBottom,
+    ShowTransition = new SlideTransition { SlideDirection = SlideTransition.Direction.Bottom },
     TransitionDuration = 0.5f,
     Resolver = _childScope.Container,  // inject from feature scope
 });

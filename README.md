@@ -80,7 +80,7 @@ Packages/com.stickerfwk.core/
 | `Rendering/` | `IBlurService`, `BlurTransitionEvent` | Blur effect contract and event |
 | `Screen/` | `ScreenService`, `ScreenChangedEvent` | Screen resolution monitoring |
 | `Time/` | `ITimeService` | Time abstraction contract |
-| `UI/` | `IUIService`, `IScreenTransitionService`, `ITransition`, `WindowView`, `WindowOptions`, `CoolButton`, `SafeAreaView`, `ScreenTransitionView`, `UILayer`, `TransitionType`, `WindowOpenedEvent`, `WindowClosedEvent` | Stack-based UI window system |
+| `UI/` | `IUIService`, `IScreenTransitionService`, `ITransition` (+ built-in `FadeTransition`, `SlideTransition`, `ScaleTransition`, `NoneTransition`, `AnimatorTransition`, `TimelineTransition`, `AnimatorTransitionTargets`, `TimelineTransitionTargets`, `PlayableDirectorExtensions`), `WindowView`, `WindowOptions`, `CoolButton`, `SafeAreaView`, `ScreenTransitionView`, `UILayer`, `WindowOpenedEvent`, `WindowClosedEvent` | Stack-based UI window system |
 | `Utilities/` | `Deque<T>`, `KeyedOperationGate<TKey>`, `SmoothMath` | General-purpose data structures and math |
 
 ### Infrastructure — `Runtime/Infrastructure/`
@@ -96,7 +96,7 @@ Packages/com.stickerfwk.core/
 | `SceneManagement/` | `SceneTransitionService` | Scene loading with transition overlay |
 | `Time/` | `TimeService`, `FeatureTimeService` | Frame time and per-feature time scaling |
 | `Timeline/` | `LoopTrack`, `LoopTrackComponent`, `LoopClipAsset`, `LoopClipBehaviour`, `LoopClipMixerBehaviour` | Custom Timeline looping track |
-| `UI/` | `UIService`, `UILayerManager`, `WindowHandle`, `TransitionFactory`, `InputBlocker`, `InputBlockerView`, `ScreenTransitionService`, `FadeTransition`, `ScaleTransition`, `SlideTransition`, `AnimatorTransition`, `TimelineTransition`, `NoneTransition`, `PlayableDirectorExtensions` | Full UI service implementation with transitions |
+| `UI/` | `UIService`, `UILayerManager`, `WindowHandle`, `InputBlocker`, `InputBlockerView`, `ScreenTransitionService` | Full UI service implementation; built-in transitions live in `Core/UI/Transitions/` |
 
 ---
 
@@ -344,7 +344,7 @@ Assets/Scripts/Runtime/Features/<FeatureName>/Presentation/
 | Event (`readonly struct`) | `XxxEvent` | `WindowOpenedEvent`, `ScreenChangedEvent` |
 | Interface | `IXxx` | `ICameraService`, `IBlurService` |
 | DI installer | `XxxLifetimeScope` | `RootLifetimeScope`, `PlinkoLifetimeScope` |
-| Enum | `XxxType` / `XxxId` / `XxxLayer` | `TransitionType`, `CameraId`, `UILayer` |
+| Enum | `XxxType` / `XxxId` / `XxxLayer` | `EaseType`, `CameraId`, `UILayer` |
 | Attribute | `XxxAttribute` | `ButtonAttribute` |
 | Private field | `_camelCase` | `_model`, `_uiService` |
 | Addressable UI key | `Views/{TypeName}.prefab` | `Views/PlinkoWindow.prefab` |

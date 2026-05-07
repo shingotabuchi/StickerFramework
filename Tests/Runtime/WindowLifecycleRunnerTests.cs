@@ -19,7 +19,7 @@ namespace StickerFwk.Tests.Runtime
                 var view = gameObject.AddComponent<TestWindowView>();
                 var runner = new WindowLifecycleRunner();
 
-                await runner.Show(view, TransitionType.None, 0f, CancellationToken.None);
+                await runner.Show(view, new NoneTransition(), 0f, CancellationToken.None);
                 runner.HideWithoutTransition(view);
 
                 Assert.That(view.BeforeShowCount, Is.EqualTo(1));

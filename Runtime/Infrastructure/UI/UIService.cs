@@ -141,7 +141,7 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
+        public async UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
             ThrowIfDisposed();
             using var linkedCts = LinkToken(ct);
@@ -151,7 +151,7 @@ namespace StickerFwk.Infrastructure.UI
             await layerLock.WaitAsync(linkedCt);
             try
             {
-                await PopLocked(layer, linkedCt);
+                return await PopLocked(layer, linkedCt);
             }
             finally
             {
@@ -159,7 +159,7 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask Pop<T>(CancellationToken ct = default) where T : WindowView
+        public async UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
         {
             ThrowIfDisposed();
             using var linkedCts = LinkToken(ct);
@@ -173,14 +173,14 @@ namespace StickerFwk.Infrastructure.UI
                 if (!TryFindLayerOf<T>(out var layer, out var view))
                 {
                     Log.Warning("UIService", $"No window of type {typeof(T).Name} found to pop");
-                    return;
+                    return false;
                 }
 
                 var layerLock = _layerLocks[layer];
                 await layerLock.WaitAsync(linkedCt);
                 try
                 {
-                    await PopViewLocked(view, layer, linkedCt);
+                    return await PopViewLocked(view, layer, linkedCt);
                 }
                 finally
                 {
@@ -193,7 +193,7 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask Pop(WindowView view, CancellationToken ct = default)
+        public async UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
         {
             if (view == null)
             {
@@ -210,14 +210,14 @@ namespace StickerFwk.Infrastructure.UI
                 if (!TryFindLayerOf(view, out var layer))
                 {
                     Log.Warning("UIService", "No matching window instance found to pop");
-                    return;
+                    return false;
                 }
 
                 var layerLock = _layerLocks[layer];
                 await layerLock.WaitAsync(linkedCt);
                 try
                 {
-                    await PopViewLocked(view, layer, linkedCt);
+                    return await PopViewLocked(view, layer, linkedCt);
                 }
                 finally
                 {
@@ -281,7 +281,7 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask PopAll(UILayer layer, CancellationToken ct = default)
+        public async UniTask<int> PopAll(UILayer layer, CancellationToken ct = default)
         {
             ThrowIfDisposed();
             using var linkedCts = LinkToken(ct);
@@ -294,10 +294,16 @@ namespace StickerFwk.Infrastructure.UI
             try
             {
                 var stack = _stacks[layer];
+                var popped = 0;
                 while (stack.Count > 0)
                 {
-                    await PopLocked(layer, linkedCt);
+                    if (await PopLocked(layer, linkedCt))
+                    {
+                        popped++;
+                    }
                 }
+
+                return popped;
             }
             finally
             {
@@ -353,7 +359,8 @@ namespace StickerFwk.Infrastructure.UI
             var prefabWindow = windowAsset.PrefabWindow;
 
             var isBlocking = options?.IsBlocking ?? prefabWindow.IsBlocking;
-            var showTransType = options?.ShowTransition ?? prefabWindow.ShowTransition;
+            var showTrans = options?.ShowTransition ?? prefabWindow.ShowTransition;
+            var hideTrans = options?.HideTransition ?? prefabWindow.HideTransition;
             var transDuration = options?.TransitionDuration ?? prefabWindow.TransitionDuration;
 
             var stack = _stacks[layer];
@@ -407,12 +414,12 @@ namespace StickerFwk.Infrastructure.UI
 
                 await windowView.OnInitialize(ct);
 
-                windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle);
+                windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle, hideTrans, transDuration);
                 stack.Push(windowHandle);
 
                 Log.Info("UIService",
-                    $"Playing show transition for window '{key}' of type '{showTransType}' with duration {transDuration}s.");
-                await _windowLifecycleRunner.Show(windowView, showTransType, transDuration, ct);
+                    $"Playing show transition for window '{key}' of type '{showTrans?.GetType().Name ?? "null"}' with duration {transDuration}s.");
+                await _windowLifecycleRunner.Show(windowView, showTrans, transDuration, ct);
 
                 _windowOpenedPublisher.Publish(new WindowOpenedEvent(key, layer));
                 Log.Info("UIService", $"Window with key '{key}' shown.");
@@ -460,17 +467,17 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        async UniTask PopLocked(UILayer layer, CancellationToken ct)
+        async UniTask<bool> PopLocked(UILayer layer, CancellationToken ct)
         {
             var stack = _stacks[layer];
             if (stack.Count == 0)
             {
                 Log.Warning("UIService", $"No windows to pop on layer {layer}");
-                return;
+                return false;
             }
 
             var windowHandle = stack.Pop();
-            await _windowLifecycleRunner.Hide(windowHandle.View, ct);
+            await _windowLifecycleRunner.Hide(windowHandle.View, windowHandle.HideTransition, windowHandle.TransitionDuration, ct);
 
             var key = windowHandle.Key;
             var windowLayer = windowHandle.Layer;
@@ -486,9 +493,10 @@ namespace StickerFwk.Infrastructure.UI
             }
 
             _windowClosedPublisher.Publish(new WindowClosedEvent(key, windowLayer));
+            return true;
         }
 
-        async UniTask PopViewLocked(WindowView view, UILayer layer, CancellationToken ct)
+        async UniTask<bool> PopViewLocked(WindowView view, UILayer layer, CancellationToken ct)
         {
             var stack = _stacks[layer];
 
@@ -507,13 +515,12 @@ namespace StickerFwk.Infrastructure.UI
             if (target == null)
             {
                 Log.Warning("UIService", "Window no longer in stack at pop time");
-                return;
+                return false;
             }
 
             if (ReferenceEquals(stack.Peek(), target))
             {
-                await PopLocked(layer, ct);
-                return;
+                return await PopLocked(layer, ct);
             }
 
             // Buried in the stack: remove without playing a hide transition (it isn't
@@ -541,6 +548,7 @@ namespace StickerFwk.Infrastructure.UI
             }
 
             _windowClosedPublisher.Publish(new WindowClosedEvent(closedKey, layer));
+            return true;
         }
 
         bool TryFindLayerOf<T>(out UILayer layer, out WindowView view) where T : WindowView

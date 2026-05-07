@@ -1,18 +1,22 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using StickerFwk.Core.UI;
 using UnityEngine;
 
-namespace StickerFwk.Infrastructure.UI
+namespace StickerFwk.Core.UI
 {
-    public class ScaleTransition : ITransition
+    [Serializable]
+    public sealed class ScaleTransition : ITransition
     {
-        const float MinScale = 0.85f;
+        [SerializeField] float _minScale = 0.85f;
 
-        public async UniTask Play(CanvasGroup canvasGroup, RectTransform rectTransform, bool isShow, float duration, CancellationToken ct)
+        public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
         {
-            var startScale = isShow ? MinScale : 1f;
-            var endScale = isShow ? 1f : MinScale;
+            var canvasGroup = view.CanvasGroup;
+            var rectTransform = view.RectTransform;
+
+            var startScale = isShow ? _minScale : 1f;
+            var endScale = isShow ? 1f : _minScale;
             var startAlpha = isShow ? 0f : 1f;
             var endAlpha = isShow ? 1f : 0f;
 

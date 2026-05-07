@@ -6,11 +6,13 @@ namespace StickerFwk.Core.UI
     public interface IUIService
     {
         UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
-        UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default);
-        UniTask Pop<T>(CancellationToken ct = default) where T : WindowView;
-        UniTask Pop(WindowView view, CancellationToken ct = default);
+        // Returns true if a window was popped, false if the target stack/window was not found.
+        UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default);
+        UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView;
+        UniTask<bool> Pop(WindowView view, CancellationToken ct = default);
         UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
-        UniTask PopAll(UILayer layer, CancellationToken ct = default);
+        // Returns the number of windows popped from the layer.
+        UniTask<int> PopAll(UILayer layer, CancellationToken ct = default);
         UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView;
         bool IsOpen<T>() where T : WindowView;
         T GetWindow<T>() where T : WindowView;

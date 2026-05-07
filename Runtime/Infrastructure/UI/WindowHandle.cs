@@ -11,14 +11,25 @@ namespace StickerFwk.Infrastructure.UI
         public GameObject Blocker { get; }
         public UILayer Layer { get; }
         public IDisposable AssetHandle { get; }
+        public ITransition HideTransition { get; }
+        public float TransitionDuration { get; }
 
-        public WindowHandle(string key, WindowView view, GameObject blocker, UILayer layer, IDisposable assetHandle)
+        public WindowHandle(
+            string key,
+            WindowView view,
+            GameObject blocker,
+            UILayer layer,
+            IDisposable assetHandle,
+            ITransition hideTransition,
+            float transitionDuration)
         {
             Key = key;
             View = view;
             Blocker = blocker;
             Layer = layer;
             AssetHandle = assetHandle;
+            HideTransition = hideTransition;
+            TransitionDuration = transitionDuration;
         }
 
         public void Dispose()

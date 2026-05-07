@@ -171,10 +171,10 @@ namespace StickerFwk.Tests.Runtime
                 return UniTask.FromResult((T)(WindowView)_views.Dequeue());
             }
 
-            public UniTask Pop(WindowView view, CancellationToken ct = default)
+            public UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
             {
                 PoppedViews.Add(view);
-                return UniTask.CompletedTask;
+                return UniTask.FromResult(true);
             }
 
             public UniTask<T> Replace<T>(string tag = null, WindowOptions options = null,
@@ -183,11 +183,11 @@ namespace StickerFwk.Tests.Runtime
                 return Push<T>(tag, options, ct);
             }
 
-            public UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default) => UniTask.CompletedTask;
+            public UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default) => UniTask.FromResult(true);
 
-            public UniTask Pop<T>(CancellationToken ct = default) where T : WindowView => UniTask.CompletedTask;
+            public UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView => UniTask.FromResult(true);
 
-            public UniTask PopAll(UILayer layer, CancellationToken ct = default) => UniTask.CompletedTask;
+            public UniTask<int> PopAll(UILayer layer, CancellationToken ct = default) => UniTask.FromResult(0);
 
             public UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView =>
                 UniTask.CompletedTask;

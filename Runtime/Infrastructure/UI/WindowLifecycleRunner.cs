@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core.UI;
@@ -8,21 +9,33 @@ namespace StickerFwk.Infrastructure.UI
     {
         public async UniTask Show(
             WindowView view,
-            TransitionType transitionType,
+            ITransition transition,
             float transitionDuration,
             CancellationToken ct)
         {
             view.OnBeforeShow();
-            var transition = TransitionFactory.Create(transitionType, view);
-            await transition.Play(view.CanvasGroup, view.RectTransform, true, transitionDuration, ct);
+            if (transition == null)
+            {
+                throw new ArgumentNullException(nameof(transition),
+                    $"Window '{view.name}' has no show transition assigned.");
+            }
+            await transition.Play(view, true, transitionDuration, ct);
             view.OnShow();
         }
 
-        public async UniTask Hide(WindowView view, CancellationToken ct)
+        public async UniTask Hide(
+            WindowView view,
+            ITransition transition,
+            float transitionDuration,
+            CancellationToken ct)
         {
             view.OnBeforeHide();
-            var transition = TransitionFactory.Create(view.HideTransition, view);
-            await transition.Play(view.CanvasGroup, view.RectTransform, false, view.TransitionDuration, ct);
+            if (transition == null)
+            {
+                throw new ArgumentNullException(nameof(transition),
+                    $"Window '{view.name}' has no hide transition assigned.");
+            }
+            await transition.Play(view, false, transitionDuration, ct);
             view.OnHide();
         }
 

@@ -1,11 +1,12 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using StickerFwk.Core.UI;
 using UnityEngine;
 
-namespace StickerFwk.Infrastructure.UI
+namespace StickerFwk.Core.UI
 {
-    public class SlideTransition : ITransition
+    [Serializable]
+    public sealed class SlideTransition : ITransition
     {
         public enum Direction
         {
@@ -15,15 +16,19 @@ namespace StickerFwk.Infrastructure.UI
             Bottom
         }
 
-        readonly Direction _direction;
+        [SerializeField] Direction _direction = Direction.Left;
 
-        public SlideTransition(Direction direction)
+        public Direction SlideDirection
         {
-            _direction = direction;
+            get => _direction;
+            set => _direction = value;
         }
 
-        public async UniTask Play(CanvasGroup canvasGroup, RectTransform rectTransform, bool isShow, float duration, CancellationToken ct)
+        public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
         {
+            var canvasGroup = view.CanvasGroup;
+            var rectTransform = view.RectTransform;
+
             var size = rectTransform.rect.size;
             var offset = _direction switch
             {

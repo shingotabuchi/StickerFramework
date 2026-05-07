@@ -1,14 +1,16 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using StickerFwk.Core.UI;
 using UnityEngine;
 
-namespace StickerFwk.Infrastructure.UI
+namespace StickerFwk.Core.UI
 {
-    public class FadeTransition : ITransition
+    [Serializable]
+    public sealed class FadeTransition : ITransition
     {
-        public async UniTask Play(CanvasGroup canvasGroup, RectTransform rectTransform, bool isShow, float duration, CancellationToken ct)
+        public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
         {
+            var canvasGroup = view.CanvasGroup;
             var startAlpha = isShow ? 0f : 1f;
             var endAlpha = isShow ? 1f : 0f;
             canvasGroup.alpha = startAlpha;

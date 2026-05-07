@@ -33,6 +33,10 @@ namespace StickerFwk.Core.UI
 
         public RectTransform RectTransform => (RectTransform)transform;
 
+        // Test-only seam. Lets unit tests configure the serialized layer field on a
+        // GameObject built at runtime (no prefab inspector). DO NOT call from production code.
+        internal void __SetLayerForTests(UILayer layer) => _layer = layer;
+
         protected virtual void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();

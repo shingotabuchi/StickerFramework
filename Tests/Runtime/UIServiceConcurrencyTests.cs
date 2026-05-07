@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
@@ -75,9 +74,10 @@ namespace StickerFwk.Tests.Runtime
             var pushA = service.Push<TestWindowViewA>(options: NewOptions(aShow)).AsTask();
             var pushB = service.Push<TestWindowViewB>(options: NewOptions(bShow)).AsTask();
 
-            // Yield enough times for the first push to reach its show transition. The second
-            // push must NOT reach its transition: layer lock is held by the first.
-            await PumpAsync();
+            // Wait deterministically for the first push to reach its show transition,
+            // then yield once so the second push can observe the layer lock and queue.
+            await aShow.WaitForPlayAsync();
+            await YieldOnce();
 
             Assert.That(aShow.PlayInvocations, Is.EqualTo(1), "first push should be running its show transition");
             Assert.That(bShow.PlayInvocations, Is.EqualTo(0), "second push must wait on the layer lock");
@@ -86,7 +86,7 @@ namespace StickerFwk.Tests.Runtime
             aShow.Complete();
             await pushA;
 
-            await PumpAsync();
+            await bShow.WaitForPlayAsync();
             Assert.That(bShow.PlayInvocations, Is.EqualTo(1), "second push should run after first releases the layer lock");
 
             bShow.Complete();
@@ -111,7 +111,10 @@ namespace StickerFwk.Tests.Runtime
             var pushUi = service.Push<TestWindowViewA>(options: NewOptions(uiShow)).AsTask();
             var pushOverlay = service.Push<TestWindowViewB>(options: NewOptions(overlayShow)).AsTask();
 
-            await PumpAsync();
+            // Both pushes target different layers — they must reach their show transitions
+            // concurrently. WhenAll on the gates is the strongest possible "ran in parallel"
+            // assertion (a serializing implementation would deadlock here).
+            await UniTask.WhenAll(uiShow.WaitForPlayAsync(), overlayShow.WaitForPlayAsync());
 
             Assert.That(uiShow.PlayInvocations, Is.EqualTo(1));
             Assert.That(overlayShow.PlayInvocations, Is.EqualTo(1),
@@ -149,7 +152,8 @@ namespace StickerFwk.Tests.Runtime
             var pushTask = service.Push<TestWindowViewA>(
                 options: NewOptions(pushShow)).AsTask();
 
-            await PumpAsync();
+            await replaceHide.WaitForPlayAsync();
+            await YieldOnce();
 
             Assert.That(replaceHide.PlayInvocations, Is.EqualTo(1),
                 "replace should be running the hide transition for the seed window");
@@ -158,7 +162,8 @@ namespace StickerFwk.Tests.Runtime
                 "concurrent push must wait on the layer lock");
 
             replaceHide.Complete();
-            await PumpAsync();
+            await replaceShow.WaitForPlayAsync();
+            await YieldOnce();
 
             // After hide completes, Replace runs PushLocked which awaits replaceShow.
             Assert.That(replaceShow.PlayInvocations, Is.EqualTo(1));
@@ -167,9 +172,9 @@ namespace StickerFwk.Tests.Runtime
 
             replaceShow.Complete();
             await replaceTask;
-            await PumpAsync();
 
             // Now the queued Push should finally run.
+            await pushShow.WaitForPlayAsync();
             Assert.That(pushShow.PlayInvocations, Is.EqualTo(1));
             pushShow.Complete();
             await pushTask;
@@ -188,7 +193,7 @@ namespace StickerFwk.Tests.Runtime
             var show = new ControllableTransition("show");
             var pushTask = service.Push<TestWindowViewA>(options: NewOptions(show)).AsTask();
 
-            await PumpAsync();
+            await show.WaitForPlayAsync();
             Assert.That(show.PlayInvocations, Is.EqualTo(1));
             Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(1));
 
@@ -239,25 +244,24 @@ namespace StickerFwk.Tests.Runtime
             // window (seed2) synchronously then awaits seedHide2 — at this point seed1 is
             // still on the stack.
             var popAllTask = service.PopAll(UILayer.UI).AsTask();
-            await PumpAsync();
+            await seedHide2.WaitForPlayAsync();
             Assert.That(seedHide2.PlayInvocations, Is.EqualTo(1),
                 "PopAll should be running iteration 1's hide for the top window");
             Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(1),
                 "iteration 1 has popped seed2; seed1 is still on the stack");
 
             // Pop<T> takes the global lock, scans, finds seed1 (still on the stack),
-            // releases — wait, in this implementation Pop<T> holds the global lock
-            // while waiting on the layer lock. The layer lock is held by PopAll, so
-            // Pop<T> queues. PopAll iteration 2 will pop seed1 synchronously next.
+            // then awaits the layer lock — held by PopAll. PopAll iteration 2 will pop
+            // seed1 synchronously before Pop<T> ever gets the layer lock.
             var popGenericTask = service.Pop<TestWindowViewA>().AsTask();
-            await PumpAsync();
+            await YieldOnce();
             Assert.That(popGenericTask.IsCompleted, Is.False,
                 "Pop<T> should be queued on the layer lock");
 
             // Let iteration 1 finish: seedHide2 completes, loop continues to iteration 2,
             // pops seed1 synchronously, awaits seedHide1.
             seedHide2.Complete();
-            await PumpAsync();
+            await seedHide1.WaitForPlayAsync();
             Assert.That(seedHide1.PlayInvocations, Is.EqualTo(1),
                 "PopAll iteration 2 should now be hiding seed1");
             Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(0),
@@ -310,34 +314,15 @@ namespace StickerFwk.Tests.Runtime
             var go = new GameObject(typeof(T).Name, typeof(RectTransform), typeof(CanvasGroup));
             _spawned.Add(go);
             var view = go.AddComponent<T>();
-            SetPrivateField(view, "_layer", layer);
+            view.__SetLayerForTests(layer);
             return go;
         }
 
-        static void SetPrivateField(object target, string name, object value)
-        {
-            var t = target.GetType();
-            FieldInfo fi = null;
-            while (t != null && fi == null)
-            {
-                fi = t.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
-                t = t.BaseType;
-            }
-            if (fi == null) throw new InvalidOperationException($"field {name} not found");
-            fi.SetValue(target, value);
-        }
-
-        // Pump UniTask continuations a few times so awaits scheduled by the previous step
-        // get a chance to run. UniTask continuations posted via SetResult typically resume
-        // synchronously, but anything awaiting layer-lock wait queues needs a yield to
-        // observe the lock release.
-        static async UniTask PumpAsync()
-        {
-            for (var i = 0; i < 8; i++)
-            {
-                await UniTask.Yield();
-            }
-        }
+        // Yield once so freshly-scheduled UniTask continuations (e.g. an op that just released
+        // a SemaphoreSlim and woke a waiter) get a chance to run before we assert on state.
+        // Use this only to "let the scheduler breathe" between deterministic gates — never to
+        // wait for an unbounded condition (use the gate's WaitForPlayAsync helper for that).
+        static async UniTask YieldOnce() => await UniTask.Yield();
 
         // ---------- Test doubles ----------
 
@@ -359,6 +344,7 @@ namespace StickerFwk.Tests.Runtime
         sealed class ControllableTransition : ITransition
         {
             readonly UniTaskCompletionSource _gate = new UniTaskCompletionSource();
+            readonly UniTaskCompletionSource _playStarted = new UniTaskCompletionSource();
             readonly bool _autoComplete;
             public string Name { get; }
             public int PlayInvocations { get; private set; }
@@ -375,9 +361,15 @@ namespace StickerFwk.Tests.Runtime
 
             public void Complete() => _gate.TrySetResult();
 
+            // Awaitable that completes the moment Play has been invoked at least once.
+            // Use to deterministically observe "the leading op has reached its transition"
+            // without polling-with-yields.
+            public UniTask WaitForPlayAsync() => _playStarted.Task;
+
             public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
             {
                 PlayInvocations++;
+                _playStarted.TrySetResult();
                 using (ct.Register(() => _gate.TrySetCanceled()))
                 {
                     await _gate.Task;
@@ -431,7 +423,15 @@ namespace StickerFwk.Tests.Runtime
             public UniTask ReleaseFromLabel(string assetLabel, CancellationToken cancellationToken = default) =>
                 UniTask.CompletedTask;
             public bool IsLoaded(string key) => _handles.ContainsKey(key);
-            public bool IsLoaded(IEnumerable<string> keys) => false;
+            public bool IsLoaded(IEnumerable<string> keys)
+            {
+                if (keys == null) return false;
+                foreach (var k in keys)
+                {
+                    if (!_handles.ContainsKey(k)) return false;
+                }
+                return true;
+            }
         }
 
         sealed class FakeAssetHandle : IAssetHandle<GameObject>

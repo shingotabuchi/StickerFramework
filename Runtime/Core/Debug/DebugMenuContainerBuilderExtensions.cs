@@ -44,6 +44,19 @@ namespace StickerFwk.Core.Debug
                 container.Resolve<DebugMenuService>();
             });
         }
+
+        /// <summary>
+        /// Register a debug page that is scoped to a child <c>LifetimeScope</c> — it is added to
+        /// the global menu when the scope initializes and removed when the scope is disposed.
+        /// Use this from a feature's <c>LifetimeScope</c> so the page only appears while that
+        /// feature's scope is alive.
+        /// </summary>
+        public static void AddScopedDebugPage<TPage>(this IContainerBuilder builder)
+            where TPage : class, IDebugPage
+        {
+            builder.Register<TPage>(Lifetime.Singleton).AsSelf();
+            builder.RegisterEntryPoint<ScopedDebugPageRegistrar<TPage>>();
+        }
     }
 }
 #endif

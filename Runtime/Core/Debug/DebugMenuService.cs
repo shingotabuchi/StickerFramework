@@ -25,7 +25,7 @@ namespace StickerFwk.Core.Debug
         private readonly Dictionary<IDebugPage, List<DebugWidget>> _widgetsByPage = new Dictionary<IDebugPage, List<DebugWidget>>();
 
         private DebugMenuSettings _settings;
-        private IReadOnlyList<IDebugPage> _registeredPages;
+        private List<IDebugPage> _registeredPages;
         private RootDebugPage _rootPage;
         private bool _isOpen;
         private Vector2 _scrollPosition;
@@ -41,8 +41,53 @@ namespace StickerFwk.Core.Debug
         public void Construct(DebugMenuSettings settings, IReadOnlyList<IDebugPage> pages)
         {
             _settings = settings ?? DebugMenuSettings.Default;
-            _registeredPages = pages ?? new List<IDebugPage>();
+            _registeredPages = pages != null ? new List<IDebugPage>(pages) : new List<IDebugPage>();
             _rootPage = new RootDebugPage(_registeredPages);
+        }
+
+        public void RegisterPage(IDebugPage page)
+        {
+            if (page == null || _registeredPages == null || _registeredPages.Contains(page))
+            {
+                return;
+            }
+
+            _registeredPages.Add(page);
+            InvalidateRootPageCache();
+        }
+
+        public void UnregisterPage(IDebugPage page)
+        {
+            if (page == null || _registeredPages == null)
+            {
+                return;
+            }
+
+            if (!_registeredPages.Remove(page))
+            {
+                return;
+            }
+
+            _widgetsByPage.Remove(page);
+            InvalidateRootPageCache();
+
+            // If the user is currently viewing the unregistered page, pop back to root.
+            if (_stack.Count > 0 && _stack.Peek() == page)
+            {
+                _stack.Pop();
+                if (_stack.Count == 0)
+                {
+                    _stack.Push(_rootPage);
+                }
+            }
+        }
+
+        private void InvalidateRootPageCache()
+        {
+            if (_rootPage != null)
+            {
+                _widgetsByPage.Remove(_rootPage);
+            }
         }
 
         private void Start()

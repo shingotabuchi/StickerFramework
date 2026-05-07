@@ -27,6 +27,17 @@ namespace StickerFwk.Core.Debug
 
         /// <summary>Pop all the way back to the root page.</summary>
         void PopToRoot();
+
+        /// <summary>
+        /// Register a page at runtime. Use this from child <c>LifetimeScope</c>s where pages
+        /// registered via <c>builder.Register&lt;IDebugPage, ...&gt;</c> aren't visible to the
+        /// menu (which is constructed in the root scope and only collection-injects pages from
+        /// there).
+        /// </summary>
+        void RegisterPage(IDebugPage page);
+
+        /// <summary>Remove a page previously added via <see cref="RegisterPage"/>.</summary>
+        void UnregisterPage(IDebugPage page);
     }
 }
 #endif

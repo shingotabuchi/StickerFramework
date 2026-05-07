@@ -22,12 +22,14 @@ A general-purpose UI framework for managing windows (menus, HUD, popups, dialogs
 ## R2: Stack-Based Navigation
 
 - **Push**: Open a new window on top of the stack.
-- **Pop**: Close the top window and return to the previous one.
+- **Pop**: Close the top window of a layer (`Pop(UILayer)`), the topmost window of a given type (`Pop<T>()`), or a specific window instance regardless of position (`Pop(WindowView)`).
 - **Replace**: Close the current top window and push a new one.
 - **PopAll**: Clear all windows from a layer.
 - **IsOpen\<T\>** / **GetWindow\<T\>**: Query whether a specific window type is open.
 - **GetStackCount**: Check the stack size for a given layer.
 - Each layer maintains its own independent stack.
+
+> `Pop(WindowView)` removes a buried window without playing its hide transition (it isn't visible) but still fires `OnBeforeHide` / `OnHide` and publishes `WindowClosedEvent`. Top-of-layer pops use the normal transition path.
 
 ## R3: Fixed Layer System
 
@@ -153,3 +155,45 @@ The binder does **not** set `Canvas.sortingOrder`. Stack order between camera-re
 - Does not configure `CanvasScaler` or `GraphicRaycaster` — those are authored in-scene.
 
 > Do not pre-assign `Canvas.worldCamera` in the inspector. The binder owns that field and will overwrite it on bind.
+
+---
+
+## R12: Scope-Aware Window Lifetime (`ScopedUIService`)
+
+Windows pushed via `IUIService` from inside a child `LifetimeScope` should be popped automatically when that scope disposes, so callers don't need a symmetric `Pop` in every teardown path. `ScopedUIService` provides this without changing the `IUIService` API.
+
+### How it works
+
+- `ScopedUIService` is a thin wrapper that takes the concrete root `UIService` and forwards every call to it.
+- It tracks every `WindowView` returned by its own `Push` / `Replace` calls.
+- On `Dispose` (scope teardown), it iterates tracked views in reverse push order and calls `IUIService.Pop(WindowView)` for each one whose GameObject hasn't already been destroyed (Unity-null check).
+- All other calls (`Pop`, `Pop<T>`, `PopAll`, `Preload`, `IsOpen`, `GetWindow`, `GetStackCount`) pass through untouched. Manual gameplay-driven pops still work exactly as before; the wrapper is purely a teardown safety net.
+
+### Wiring
+
+Register the wrapper `As<IUIService>()` in the child scope. VContainer's child-scope resolution shadows the root singleton for any service constructed inside that scope, so consumers keep injecting plain `IUIService` and have no idea the wrapper is in front. To prevent the wrapper resolving back into itself, construct it with the parent scope's `IUIService` via a factory:
+
+```csharp
+public class FeatureLifetimeScope : LifetimeScope
+{
+    protected override void Configure(IContainerBuilder builder)
+    {
+        builder.Register(_ => new ScopedUIService(Parent.Container.Resolve<IUIService>()),
+            Lifetime.Singleton).As<IUIService>();
+        // ...other feature services that inject IUIService...
+    }
+}
+```
+
+`Lifetime.Singleton` here means "one instance per this LifetimeScope" — the wrapper is created when the scope builds and disposed when the scope disposes. Resolving `IUIService` from `Parent.Container` skips the registration we are currently defining, so no recursion.
+
+### What stays unchanged
+
+- Services and presenters in the child scope inject `IUIService` as before. They cannot tell whether they got the singleton or the wrapper.
+- Direct `Pop` / `Replace` / `PopAll` calls behave identically — the wrapper just delegates and the underlying stack mutates as usual.
+- Tracked windows that were popped manually before scope teardown are detected via a Unity-null check on the cached `WindowView` reference and skipped on dispose.
+- Root-scope services (registered in `RootLifetimeScope`) still resolve `IUIService` to the singleton; only child scopes that explicitly register a `ScopedUIService` get the wrapper.
+
+### When to add it to a new scope
+
+Register a `ScopedUIService` in any feature/scene `LifetimeScope` whose services push windows that should not survive the scope. If the scope's services never push windows (or always pop them through their own teardown), the registration is unnecessary.

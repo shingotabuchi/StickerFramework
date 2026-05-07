@@ -46,7 +46,8 @@ The central system. Stack-based window management with async transitions.
 
 **Key types:**
 - `WindowView` — Abstract MonoBehaviour base class for all UI screens. Configurable via Inspector: layer, blocking, transition type/duration.
-- `IUIService` — Push/Pop/Replace windows on layer stacks. Loads prefabs from Addressables using key `Views/{TypeName}.prefab`.
+- `IUIService` — Push/Pop/Replace windows on layer stacks. Loads prefabs from Addressables using key `Views/{TypeName}.prefab`. `Pop(WindowView)` removes a specific instance regardless of stack position.
+- `ScopedUIService` — Per-scope wrapper that registers `As<IUIService>()` in a child `LifetimeScope` to auto-pop tracked windows on scope dispose. Transparent to consumers.
 - `UILayer` — Enum: `Background(0)`, `HUD(100)`, `Window(200)`, `Popup(300)`, `Modal(400)`, `Overlay(500)`.
 - `IScreenTransitionService` — Full-screen overlay transitions (fade to black, wipe, etc.) for scene changes.
 - `WindowOptions` — Runtime overrides for blocking, transition type/duration, and custom DI resolver.

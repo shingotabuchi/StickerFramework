@@ -122,15 +122,79 @@ namespace StickerFwk.Infrastructure.UI
             {
                 foreach (var handle in pair.Value)
                 {
-                    if (handle.View is T)
+                    if (handle.View is T target)
                     {
-                        await Pop(pair.Key, ct);
+                        await Pop(target, ct);
                         return;
                     }
                 }
             }
 
             Log.Warning("UIService", $"No window of type {typeof(T).Name} found to pop");
+        }
+
+        public async UniTask Pop(WindowView view, CancellationToken ct = default)
+        {
+            if (view == null)
+            {
+                return;
+            }
+
+            foreach (var pair in _stacks)
+            {
+                var stack = pair.Value;
+                WindowHandle target = null;
+                foreach (var handle in stack)
+                {
+                    if (ReferenceEquals(handle.View, view))
+                    {
+                        target = handle;
+                        break;
+                    }
+                }
+
+                if (target == null)
+                {
+                    continue;
+                }
+
+                var layer = pair.Key;
+                if (ReferenceEquals(stack.Peek(), target))
+                {
+                    await Pop(layer, ct);
+                    return;
+                }
+
+                // Buried in the stack: remove without playing a hide transition (it isn't
+                // visible) but still fire lifecycle hooks and publish the closed event so
+                // bookkeeping stays consistent.
+                var temp = new List<WindowHandle>(stack.Count);
+                while (stack.Count > 0)
+                {
+                    var top = stack.Pop();
+                    if (ReferenceEquals(top, target))
+                    {
+                        break;
+                    }
+
+                    temp.Add(top);
+                }
+
+                target.View.OnBeforeHide();
+                target.View.OnHide();
+                var closedKey = target.Key;
+                target.Dispose();
+
+                for (var i = temp.Count - 1; i >= 0; i--)
+                {
+                    stack.Push(temp[i]);
+                }
+
+                _windowClosedPublisher.Publish(new WindowClosedEvent(closedKey, layer));
+                return;
+            }
+
+            Log.Warning("UIService", "No matching window instance found to pop");
         }
 
         public async UniTask<T> Replace<T>(UILayer layer, string tag = null, WindowOptions options = null,

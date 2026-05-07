@@ -503,7 +503,7 @@ await _uiService.Pop<PlinkoWindow>();
 
 | Interface | What It Does |
 |---|---|
-| `IUIService` | Push/Pop/Replace windows on layer stacks |
+| `IUIService` | Push/Pop/Replace windows on layer stacks (override per-scope by registering `ScopedUIService` `As<IUIService>()` for auto-pop on scope dispose) |
 | `IScreenTransitionService` | Full-screen overlay transitions |
 | `ISceneTransitionService` | Load scenes with screen cover + input lock |
 | `IInputService` | Pointer position, press state (respects locks) |

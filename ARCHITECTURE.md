@@ -48,7 +48,7 @@ The central system. Stack-based window management with async transitions.
 - `WindowView` — Abstract MonoBehaviour base class for all UI screens. Configurable via Inspector: layer, blocking, transition type/duration.
 - `IUIService` — Push/Pop/Replace windows on layer stacks. Loads prefabs from Addressables using key `Views/{TypeName}.prefab`. `Pop(WindowView)` removes a specific instance regardless of stack position.
 - `ScopedUIService` — Per-scope wrapper that registers `As<IUIService>()` in a child `LifetimeScope` to auto-pop tracked windows on scope dispose. Transparent to consumers.
-- `UILayer` — Enum: `Background(0)`, `HUD(100)`, `Window(200)`, `Popup(300)`, `Modal(400)`, `Overlay(500)`.
+- `UILayer` — Enum with three values, each backed by a dedicated camera (`CameraId`) and Canvas: `UI(100)`, `UIOverlay(200)`, `Wipe(300)`. Sort order matches the integer value.
 - `IScreenTransitionService` — Full-screen overlay transitions (fade to black, wipe, etc.) for scene changes.
 - `WindowOptions` — Runtime overrides for blocking, transition type/duration, and custom DI resolver.
 
@@ -115,7 +115,8 @@ Use presenters for view-specific logic such as MessagePipe/R3 subscriptions, UI 
 
 ### Initialization (`Core/Initialization/`)
 
-- `IRootInitService` — Exposes `UniTask Initialization` for awaiting app startup (frame rate setup, master data loading).
+- `IRootInitService` — Exposes `UniTask Initialization` for awaiting app startup (applies `RootInitSettings.TargetFrameRate`, loads master data).
+- `RootInitSettings` — ScriptableObject configuring the startup target frame rate. Register via `builder.UseRootInit(settings)`; defaults leave `Application.targetFrameRate` at the platform default (`-1`).
 
 ## Design Patterns
 

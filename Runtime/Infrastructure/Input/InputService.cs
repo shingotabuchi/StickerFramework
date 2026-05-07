@@ -7,11 +7,25 @@ using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 namespace StickerFwk.Infrastructure.Input
 {
-    public class InputService : IRawInputService
+    public class InputService : IRawInputService, System.IDisposable
     {
+        readonly bool _enabledEnhancedTouch;
+
         public InputService()
         {
-            EnhancedTouchSupport.Enable();
+            if (!EnhancedTouchSupport.enabled)
+            {
+                EnhancedTouchSupport.Enable();
+                _enabledEnhancedTouch = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_enabledEnhancedTouch && EnhancedTouchSupport.enabled)
+            {
+                EnhancedTouchSupport.Disable();
+            }
         }
 
         public Vector2 PointerPosition

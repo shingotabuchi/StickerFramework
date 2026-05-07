@@ -16,9 +16,11 @@ namespace StickerFwk.Infrastructure.UI
     // back into itself, the registration must construct it with the parent scope's
     // IUIService, e.g. via `Parent.Container.Resolve<IUIService>()` in a factory.
     //
-    // Pop / Replace / PopAll calls are forwarded as-is. Tracked windows whose GameObjects
-    // have been destroyed externally (e.g. popped via direct calls) are skipped on
-    // dispose via Unity's null-equality check.
+    // Pop / PopAll calls are forwarded to the inner service and the corresponding entries
+    // are removed from the tracking list so long-lived scopes do not accumulate dead
+    // references. Tracked windows whose GameObjects have been destroyed externally are
+    // pruned on subsequent Push/Replace/Pop calls and skipped on dispose via Unity's
+    // null-equality check.
     public sealed class ScopedUIService : IUIService, IDisposable
     {
         readonly IUIService _inner;
@@ -34,6 +36,7 @@ namespace StickerFwk.Infrastructure.UI
             where T : WindowView
         {
             ThrowIfDisposed();
+            PruneDead();
             var view = await _inner.Push<T>(tag, options, ct);
             if (view != null)
             {
@@ -42,26 +45,43 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
-        public UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
+        public async UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
-            return _inner.Pop(layer, ct);
+            await _inner.Pop(layer, ct);
+            RemoveLastMatch(v => v.Layer == layer);
+            PruneDead();
         }
 
-        public UniTask Pop<T>(CancellationToken ct = default) where T : WindowView
+        public async UniTask Pop<T>(CancellationToken ct = default) where T : WindowView
         {
-            return _inner.Pop<T>(ct);
+            await _inner.Pop<T>(ct);
+            RemoveLastMatch(v => v is T);
+            PruneDead();
         }
 
-        public UniTask Pop(WindowView view, CancellationToken ct = default)
+        public async UniTask Pop(WindowView view, CancellationToken ct = default)
         {
-            return _inner.Pop(view, ct);
+            await _inner.Pop(view, ct);
+            if (view != null)
+            {
+                for (var i = _tracked.Count - 1; i >= 0; i--)
+                {
+                    if (ReferenceEquals(_tracked[i], view))
+                    {
+                        _tracked.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+            PruneDead();
         }
 
-        public async UniTask<T> Replace<T>(UILayer layer, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+        public async UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
             where T : WindowView
         {
             ThrowIfDisposed();
-            var view = await _inner.Replace<T>(layer, tag, options, ct);
+            PruneDead();
+            var view = await _inner.Replace<T>(tag, options, ct);
             if (view != null)
             {
                 _tracked.Add(view);
@@ -69,9 +89,17 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
-        public UniTask PopAll(UILayer layer, CancellationToken ct = default)
+        public async UniTask PopAll(UILayer layer, CancellationToken ct = default)
         {
-            return _inner.PopAll(layer, ct);
+            await _inner.PopAll(layer, ct);
+            for (var i = _tracked.Count - 1; i >= 0; i--)
+            {
+                var view = _tracked[i];
+                if (view == null || view.Layer == layer)
+                {
+                    _tracked.RemoveAt(i);
+                }
+            }
         }
 
         public UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView
@@ -122,6 +150,34 @@ namespace StickerFwk.Infrastructure.UI
             if (_disposed)
             {
                 throw new ObjectDisposedException(nameof(ScopedUIService));
+            }
+        }
+
+        void PruneDead()
+        {
+            for (var i = _tracked.Count - 1; i >= 0; i--)
+            {
+                if (_tracked[i] == null)
+                {
+                    _tracked.RemoveAt(i);
+                }
+            }
+        }
+
+        void RemoveLastMatch(Func<WindowView, bool> predicate)
+        {
+            for (var i = _tracked.Count - 1; i >= 0; i--)
+            {
+                var view = _tracked[i];
+                if (view == null)
+                {
+                    continue;
+                }
+                if (predicate(view))
+                {
+                    _tracked.RemoveAt(i);
+                    return;
+                }
             }
         }
     }

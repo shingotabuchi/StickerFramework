@@ -19,10 +19,26 @@ namespace StickerFwk.Infrastructure.UI
 
         private readonly IAssetRequester _assetRequester;
         private readonly UILayerManager _layerManager;
+        private readonly WindowAssetResolver _windowAssetResolver;
+        private readonly WindowLifecycleRunner _windowLifecycleRunner = new();
         private readonly IObjectResolver _resolver;
         private readonly Dictionary<UILayer, Stack<WindowHandle>> _stacks;
         private readonly IPublisher<WindowClosedEvent> _windowClosedPublisher;
         private readonly IPublisher<WindowOpenedEvent> _windowOpenedPublisher;
+
+        // Concurrency model:
+        //   - Each UILayer has a SemaphoreSlim that serializes Push/Pop/Replace on that layer.
+        //     Different layers can run concurrently.
+        //   - A global semaphore serializes cross-layer scans (Pop<T>(), Pop(WindowView)).
+        //     Lock ordering is global -> layer (never the reverse) so nested acquisition is
+        //     deadlock-free.
+        //   - Asset loads happen outside any lock so they can run in parallel.
+        //   - _disposeCts is cancelled on Dispose so queued waiters and in-flight awaits
+        //     observe cancellation and unwind cleanly.
+        private readonly Dictionary<UILayer, SemaphoreSlim> _layerLocks;
+        private readonly SemaphoreSlim _globalLock = new(1, 1);
+        private readonly CancellationTokenSource _disposeCts = new();
+        private bool _disposed;
 
         [Inject]
         public UIService(
@@ -37,14 +53,30 @@ namespace StickerFwk.Infrastructure.UI
             _resolver = resolver;
             _windowOpenedPublisher = windowOpenedPublisher;
             _windowClosedPublisher = windowClosedPublisher;
+            _windowAssetResolver = new WindowAssetResolver(assetRequester);
             _layerManager = new UILayerManager(cameraService, cameraRegisteredSubscriber);
             _stacks = new Dictionary<UILayer, Stack<WindowHandle>>();
+            _layerLocks = new Dictionary<UILayer, SemaphoreSlim>();
 
-            foreach (var layer in AllLayers) _stacks[layer] = new Stack<WindowHandle>();
+            foreach (var layer in AllLayers)
+            {
+                _stacks[layer] = new Stack<WindowHandle>();
+                _layerLocks[layer] = new SemaphoreSlim(1, 1);
+            }
         }
 
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            // Cancel any queued or in-flight ops; their linked tokens fire and they unwind.
+            try { _disposeCts.Cancel(); } catch { /* ignored */ }
+
             foreach (var stack in _stacks.Values)
                 while (stack.Count > 0)
                 {
@@ -54,6 +86,7 @@ namespace StickerFwk.Infrastructure.UI
 
             _stacks.Clear();
             _layerManager.Dispose();
+            _disposeCts.Dispose();
         }
 
         public void Start()
@@ -75,155 +108,201 @@ namespace StickerFwk.Infrastructure.UI
         public async UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
             where T : WindowView
         {
+            ThrowIfDisposed();
             var key = BuildKey<T>(tag);
-            var window = await PushInternal(key, options, ct);
-            return window as T;
+
+            using var linkedCts = LinkToken(ct);
+            var linkedCt = linkedCts.Token;
+
+            // Load asset OUTSIDE any lock so concurrent pushes can load in parallel.
+            var windowAsset = await _windowAssetResolver.Load<T>(key, linkedCt);
+            UILayer layer;
+            SemaphoreSlim layerLock;
+            try
+            {
+                layer = windowAsset.PrefabWindow.Layer;
+                layerLock = _layerLocks[layer];
+                await layerLock.WaitAsync(linkedCt);
+            }
+            catch
+            {
+                windowAsset.Dispose();
+                throw;
+            }
+
+            try
+            {
+                // PushLocked takes ownership of windowAsset and disposes it on any failure.
+                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt);
+            }
+            finally
+            {
+                layerLock.Release();
+            }
         }
 
         public async UniTask Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
-            var stack = _stacks[layer];
-            if (stack.Count == 0)
+            ThrowIfDisposed();
+            using var linkedCts = LinkToken(ct);
+            var linkedCt = linkedCts.Token;
+
+            var layerLock = _layerLocks[layer];
+            await layerLock.WaitAsync(linkedCt);
+            try
             {
-                Log.Warning("UIService", $"No windows to pop on layer {layer}");
-                return;
+                await PopLocked(layer, linkedCt);
             }
-
-            var windowHandle = stack.Pop();
-            windowHandle.View.OnBeforeHide();
-
-            var hideTransType = windowHandle.View.HideTransition;
-            var transDuration = windowHandle.View.TransitionDuration;
-            var hideTransition = TransitionFactory.Create(hideTransType, windowHandle.View);
-            await hideTransition.Play(windowHandle.View.CanvasGroup, windowHandle.View.RectTransform, false,
-                transDuration, ct);
-
-            windowHandle.View.OnHide();
-
-            var key = windowHandle.Key;
-            var windowLayer = windowHandle.Layer;
-            windowHandle.Dispose();
-
-            if (stack.Count > 0)
+            finally
             {
-                stack.Peek().View.CanvasGroup.interactable = true;
+                layerLock.Release();
             }
-            else
-            {
-                _layerManager.SetLayerCanvasEnabled(windowLayer, false);
-            }
-
-            _windowClosedPublisher.Publish(new WindowClosedEvent(key, windowLayer));
         }
 
         public async UniTask Pop<T>(CancellationToken ct = default) where T : WindowView
         {
-            foreach (var pair in _stacks)
+            ThrowIfDisposed();
+            using var linkedCts = LinkToken(ct);
+            var linkedCt = linkedCts.Token;
+
+            // Cross-layer scan: take global lock first, then nest layer lock (global -> layer
+            // ordering keeps things deadlock-free since other ops never go layer -> global).
+            await _globalLock.WaitAsync(linkedCt);
+            try
             {
-                foreach (var handle in pair.Value)
+                if (!TryFindLayerOf<T>(out var layer, out var view))
                 {
-                    if (handle.View is T target)
-                    {
-                        await Pop(target, ct);
-                        return;
-                    }
+                    Log.Warning("UIService", $"No window of type {typeof(T).Name} found to pop");
+                    return;
+                }
+
+                var layerLock = _layerLocks[layer];
+                await layerLock.WaitAsync(linkedCt);
+                try
+                {
+                    await PopViewLocked(view, layer, linkedCt);
+                }
+                finally
+                {
+                    layerLock.Release();
                 }
             }
-
-            Log.Warning("UIService", $"No window of type {typeof(T).Name} found to pop");
+            finally
+            {
+                _globalLock.Release();
+            }
         }
 
         public async UniTask Pop(WindowView view, CancellationToken ct = default)
         {
             if (view == null)
             {
-                return;
+                throw new ArgumentNullException(nameof(view));
             }
 
-            foreach (var pair in _stacks)
+            ThrowIfDisposed();
+            using var linkedCts = LinkToken(ct);
+            var linkedCt = linkedCts.Token;
+
+            await _globalLock.WaitAsync(linkedCt);
+            try
             {
-                var stack = pair.Value;
-                WindowHandle target = null;
-                foreach (var handle in stack)
+                if (!TryFindLayerOf(view, out var layer))
                 {
-                    if (ReferenceEquals(handle.View, view))
-                    {
-                        target = handle;
-                        break;
-                    }
-                }
-
-                if (target == null)
-                {
-                    continue;
-                }
-
-                var layer = pair.Key;
-                if (ReferenceEquals(stack.Peek(), target))
-                {
-                    await Pop(layer, ct);
+                    Log.Warning("UIService", "No matching window instance found to pop");
                     return;
                 }
 
-                // Buried in the stack: remove without playing a hide transition (it isn't
-                // visible) but still fire lifecycle hooks and publish the closed event so
-                // bookkeeping stays consistent.
-                var temp = new List<WindowHandle>(stack.Count);
-                while (stack.Count > 0)
+                var layerLock = _layerLocks[layer];
+                await layerLock.WaitAsync(linkedCt);
+                try
                 {
-                    var top = stack.Pop();
-                    if (ReferenceEquals(top, target))
-                    {
-                        break;
-                    }
-
-                    temp.Add(top);
+                    await PopViewLocked(view, layer, linkedCt);
                 }
-
-                target.View.OnBeforeHide();
-                target.View.OnHide();
-                var closedKey = target.Key;
-                target.Dispose();
-
-                for (var i = temp.Count - 1; i >= 0; i--)
+                finally
                 {
-                    stack.Push(temp[i]);
+                    layerLock.Release();
                 }
-
-                _windowClosedPublisher.Publish(new WindowClosedEvent(closedKey, layer));
-                return;
             }
-
-            Log.Warning("UIService", "No matching window instance found to pop");
+            finally
+            {
+                _globalLock.Release();
+            }
         }
 
-        public async UniTask<T> Replace<T>(UILayer layer, string tag = null, WindowOptions options = null,
+        public async UniTask<T> Replace<T>(string tag = null, WindowOptions options = null,
             CancellationToken ct = default) where T : WindowView
         {
-            var stack = _stacks[layer];
-            if (stack.Count > 0)
+            ThrowIfDisposed();
+            var key = BuildKey<T>(tag);
+
+            using var linkedCts = LinkToken(ct);
+            var linkedCt = linkedCts.Token;
+
+            var windowAsset = await _windowAssetResolver.Load<T>(key, linkedCt);
+            UILayer layer;
+            SemaphoreSlim layerLock;
+            try
             {
-                var current = stack.Pop();
-                current.View.OnBeforeHide();
-
-                var hideTransition = TransitionFactory.Create(current.View.HideTransition, current.View);
-                await hideTransition.Play(current.View.CanvasGroup, current.View.RectTransform, false,
-                    current.View.TransitionDuration, ct);
-
-                current.View.OnHide();
-
-                var closedKey = current.Key;
-                current.Dispose();
-                _windowClosedPublisher.Publish(new WindowClosedEvent(closedKey, layer));
+                // Layer is sourced from the prefab so pop and push are guaranteed symmetric.
+                layer = windowAsset.PrefabWindow.Layer;
+                layerLock = _layerLocks[layer];
+                await layerLock.WaitAsync(linkedCt);
+            }
+            catch
+            {
+                windowAsset.Dispose();
+                throw;
             }
 
-            return await Push<T>(tag, options, ct);
+            try
+            {
+                var stack = _stacks[layer];
+                if (stack.Count > 0)
+                {
+                    try
+                    {
+                        await PopLocked(layer, linkedCt);
+                    }
+                    catch
+                    {
+                        // PushLocked never took ownership; dispose the asset ourselves.
+                        windowAsset.Dispose();
+                        throw;
+                    }
+                }
+
+                // PushLocked takes ownership of windowAsset and disposes it on any failure.
+                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt);
+            }
+            finally
+            {
+                layerLock.Release();
+            }
         }
 
         public async UniTask PopAll(UILayer layer, CancellationToken ct = default)
         {
-            var stack = _stacks[layer];
-            while (stack.Count > 0) await Pop(layer, ct);
+            ThrowIfDisposed();
+            using var linkedCts = LinkToken(ct);
+            var linkedCt = linkedCts.Token;
+
+            // Acquire the layer lock once and drain via the lock-free core to avoid
+            // re-entrant waits (SemaphoreSlim is not reentrant).
+            var layerLock = _layerLocks[layer];
+            await layerLock.WaitAsync(linkedCt);
+            try
+            {
+                var stack = _stacks[layer];
+                while (stack.Count > 0)
+                {
+                    await PopLocked(layer, linkedCt);
+                }
+            }
+            finally
+            {
+                layerLock.Release();
+            }
         }
 
         public bool IsOpen<T>() where T : WindowView
@@ -263,77 +342,256 @@ namespace StickerFwk.Infrastructure.UI
             await _assetRequester.Preload<GameObject>(new[] { key }, ct);
         }
 
-        async UniTask<WindowView> PushInternal(string key, WindowOptions options, CancellationToken ct)
+        // ---------------------------------------------------------------------
+        // Lock-free cores. Callers MUST hold the corresponding layer lock.
+        // ---------------------------------------------------------------------
+
+        async UniTask<T> PushLocked<T>(string key, WindowAsset<T> windowAsset, WindowOptions options, UILayer layer,
+            CancellationToken ct) where T : WindowView
         {
             Log.Info("UIService", $"Pushing window with key '{key}'");
-            var assetHandle = await _assetRequester.RequestAsset<GameObject>(key, ct);
-            var prefab = assetHandle.Asset;
+            var prefabWindow = windowAsset.PrefabWindow;
 
-            var prefabWindow = prefab.GetComponent<WindowView>();
-            if (prefabWindow == null)
-            {
-                assetHandle.Dispose();
-                Log.Error("UIService", $"Prefab '{key}' does not have a WindowView component");
-                return null;
-            }
-
-            var layer = prefabWindow.Layer;
             var isBlocking = options?.IsBlocking ?? prefabWindow.IsBlocking;
             var showTransType = options?.ShowTransition ?? prefabWindow.ShowTransition;
             var transDuration = options?.TransitionDuration ?? prefabWindow.TransitionDuration;
 
-            // Layer canvases are created on demand and bound to the target camera. If the camera
-            // profile is not yet applied, fail fast: the caller should ensure the profile is ready
-            // (e.g. via RootLifetimeScope.Apply) before any UI push.
-            if (!_layerManager.TryEnsureLayer(layer, out var ensureError))
-            {
-                Log.Error("UIService", $"Cannot push '{key}': {ensureError}");
-                assetHandle.Dispose();
-                return null;
-            }
+            var stack = _stacks[layer];
+            var enabledLayer = false;
+            var disabledPreviousTop = false;
+            GameObject blocker = null;
+            GameObject instance = null;
+            WindowHandle windowHandle = null;
 
+            try
+            {
+                // Layer canvases are created on demand and bound to the target camera. If the camera
+                // profile is not yet applied, fail fast: the caller should ensure the profile is ready
+                // (e.g. via RootLifetimeScope.Apply) before any UI push.
+                if (!_layerManager.TryEnsureLayer(layer, out var ensureError))
+                {
+                    throw new InvalidOperationException($"Cannot push '{key}': {ensureError}");
+                }
+
+                if (stack.Count == 0)
+                {
+                    _layerManager.SetLayerCanvasEnabled(layer, true);
+                    enabledLayer = true;
+                }
+
+                if (stack.Count > 0 && isBlocking)
+                {
+                    var previousTop = stack.Peek().View;
+                    previousTop.CanvasGroup.interactable = false;
+                    disabledPreviousTop = true;
+                }
+
+                var layerTransform = _layerManager.GetLayerTransform(layer);
+
+                if (isBlocking)
+                {
+                    blocker = InputBlocker.Create(layerTransform);
+                }
+
+                instance = Object.Instantiate(windowAsset.Prefab, layerTransform);
+                var resolver = options?.Resolver ?? _resolver;
+                Log.Info("UIService", $"Injecting '{key}' using resolver '{resolver.GetType().Name}'.");
+                resolver.InjectGameObject(instance);
+
+                var windowView = instance.GetComponent<T>();
+                if (windowView == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Instantiated window '{key}' is missing expected component {typeof(T).Name}.");
+                }
+
+                await windowView.OnInitialize(ct);
+
+                windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle);
+                stack.Push(windowHandle);
+
+                Log.Info("UIService",
+                    $"Playing show transition for window '{key}' of type '{showTransType}' with duration {transDuration}s.");
+                await _windowLifecycleRunner.Show(windowView, showTransType, transDuration, ct);
+
+                _windowOpenedPublisher.Publish(new WindowOpenedEvent(key, layer));
+                Log.Info("UIService", $"Window with key '{key}' shown.");
+
+                return windowView;
+            }
+            catch
+            {
+                if (windowHandle != null)
+                {
+                    if (stack.Count > 0 && ReferenceEquals(stack.Peek(), windowHandle))
+                    {
+                        stack.Pop();
+                    }
+
+                    windowHandle.Dispose();
+                }
+                else
+                {
+                    if (blocker != null)
+                    {
+                        Object.Destroy(blocker);
+                    }
+
+                    if (instance != null)
+                    {
+                        Object.Destroy(instance);
+                    }
+
+                    // No WindowHandle yet -> the asset's lifetime hasn't been transferred.
+                    windowAsset.Dispose();
+                }
+
+                if (disabledPreviousTop && stack.Count > 0)
+                {
+                    stack.Peek().View.CanvasGroup.interactable = true;
+                }
+
+                if (enabledLayer && stack.Count == 0)
+                {
+                    _layerManager.SetLayerCanvasEnabled(layer, false);
+                }
+
+                throw;
+            }
+        }
+
+        async UniTask PopLocked(UILayer layer, CancellationToken ct)
+        {
             var stack = _stacks[layer];
             if (stack.Count == 0)
             {
-                _layerManager.SetLayerCanvasEnabled(layer, true);
+                Log.Warning("UIService", $"No windows to pop on layer {layer}");
+                return;
             }
 
-            if (stack.Count > 0 && isBlocking)
+            var windowHandle = stack.Pop();
+            await _windowLifecycleRunner.Hide(windowHandle.View, ct);
+
+            var key = windowHandle.Key;
+            var windowLayer = windowHandle.Layer;
+            windowHandle.Dispose();
+
+            if (stack.Count > 0)
             {
-                var previousTop = stack.Peek().View;
-                previousTop.CanvasGroup.interactable = false;
+                stack.Peek().View.CanvasGroup.interactable = true;
             }
-
-            var layerTransform = _layerManager.GetLayerTransform(layer);
-
-            GameObject blocker = null;
-            if (isBlocking)
+            else
             {
-                blocker = InputBlocker.Create(layerTransform);
+                _layerManager.SetLayerCanvasEnabled(windowLayer, false);
             }
 
-            var instance = Object.Instantiate(prefab, layerTransform);
-            var resolver = options?.Resolver ?? _resolver;
-            Log.Info("UIService", $"Injecting '{key}' using resolver '{resolver.GetType().Name}'.");
-            resolver.InjectGameObject(instance);
+            _windowClosedPublisher.Publish(new WindowClosedEvent(key, windowLayer));
+        }
 
-            var windowView = instance.GetComponent<WindowView>();
-            await windowView.OnInitialize(ct);
+        async UniTask PopViewLocked(WindowView view, UILayer layer, CancellationToken ct)
+        {
+            var stack = _stacks[layer];
 
-            var windowHandle = new WindowHandle(key, windowView, blocker, layer, assetHandle);
-            stack.Push(windowHandle);
+            // Re-locate under the layer lock: between releasing the global lock and acquiring
+            // the layer lock another op may have removed/popped this window.
+            WindowHandle target = null;
+            foreach (var handle in stack)
+            {
+                if (ReferenceEquals(handle.View, view))
+                {
+                    target = handle;
+                    break;
+                }
+            }
 
-            windowView.OnBeforeShow();
+            if (target == null)
+            {
+                Log.Warning("UIService", "Window no longer in stack at pop time");
+                return;
+            }
 
-            var showTransition = TransitionFactory.Create(showTransType, windowView);
-            Log.Info("UIService", $"Playing show transition for window '{key}' of type '{showTransType}' with duration {transDuration}s.");
-            await showTransition.Play(windowView.CanvasGroup, windowView.RectTransform, true, transDuration, ct);
+            if (ReferenceEquals(stack.Peek(), target))
+            {
+                await PopLocked(layer, ct);
+                return;
+            }
 
-            windowView.OnShow();
-            _windowOpenedPublisher.Publish(new WindowOpenedEvent(key, layer));
-            Log.Info("UIService", $"Window with key '{key}' shown.");
+            // Buried in the stack: remove without playing a hide transition (it isn't
+            // visible) but still fire lifecycle hooks and publish the closed event so
+            // bookkeeping stays consistent.
+            var temp = new List<WindowHandle>(stack.Count);
+            while (stack.Count > 0)
+            {
+                var top = stack.Pop();
+                if (ReferenceEquals(top, target))
+                {
+                    break;
+                }
 
-            return windowView;
+                temp.Add(top);
+            }
+
+            _windowLifecycleRunner.HideWithoutTransition(target.View);
+            var closedKey = target.Key;
+            target.Dispose();
+
+            for (var i = temp.Count - 1; i >= 0; i--)
+            {
+                stack.Push(temp[i]);
+            }
+
+            _windowClosedPublisher.Publish(new WindowClosedEvent(closedKey, layer));
+        }
+
+        bool TryFindLayerOf<T>(out UILayer layer, out WindowView view) where T : WindowView
+        {
+            foreach (var pair in _stacks)
+            {
+                foreach (var handle in pair.Value)
+                {
+                    if (handle.View is T match)
+                    {
+                        layer = pair.Key;
+                        view = match;
+                        return true;
+                    }
+                }
+            }
+
+            layer = default;
+            view = null;
+            return false;
+        }
+
+        bool TryFindLayerOf(WindowView view, out UILayer layer)
+        {
+            foreach (var pair in _stacks)
+            {
+                foreach (var handle in pair.Value)
+                {
+                    if (ReferenceEquals(handle.View, view))
+                    {
+                        layer = pair.Key;
+                        return true;
+                    }
+                }
+            }
+
+            layer = default;
+            return false;
+        }
+
+        CancellationTokenSource LinkToken(CancellationToken ct)
+        {
+            return CancellationTokenSource.CreateLinkedTokenSource(ct, _disposeCts.Token);
+        }
+
+        void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(UIService));
+            }
         }
     }
 }

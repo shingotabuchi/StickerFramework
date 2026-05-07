@@ -41,7 +41,7 @@ namespace StickerFwk.Infrastructure.SceneManagement
                 _sceneReadyNotifier.Reset();
                 await SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single)
                     .ToUniTask(cancellationToken: innerCt);
-                await _sceneReadyNotifier.WaitForReady();
+                await _sceneReadyNotifier.WaitForReady(innerCt);
             },
             transitionViewTag,
             ct);

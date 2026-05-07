@@ -139,6 +139,45 @@ namespace StickerFwk.Core.Debug
         }
     }
 
+    internal sealed class DropdownWidget : DebugWidget
+    {
+        public string Text;
+        public Func<System.Collections.Generic.IReadOnlyList<string>> GetOptions;
+        public Func<int> GetIndex;
+        public Action<int> SetIndex;
+        private bool _expanded;
+
+        public override void Render(DebugMenuRenderContext ctx)
+        {
+            var options = GetOptions != null ? GetOptions() : null;
+            var current = GetIndex != null ? GetIndex() : -1;
+            var label = options != null && current >= 0 && current < options.Count
+                ? options[current]
+                : "(none)";
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(Text, ctx.Styles.Label, GUILayout.Width(ctx.Styles.LabelWidth));
+            if (GUILayout.Button(label + (_expanded ? "  ▲" : "  ▼"), ctx.Styles.Button, ctx.Styles.WidgetHeight))
+            {
+                _expanded = !_expanded;
+            }
+            GUILayout.EndHorizontal();
+
+            if (_expanded && options != null)
+            {
+                for (var i = 0; i < options.Count; i++)
+                {
+                    var marker = i == current ? "● " : "   ";
+                    if (GUILayout.Button(marker + options[i], ctx.Styles.Button, ctx.Styles.WidgetHeight))
+                    {
+                        SetIndex?.Invoke(i);
+                        _expanded = false;
+                    }
+                }
+            }
+        }
+    }
+
     internal sealed class PageLinkWidget : DebugWidget
     {
         public string Text;

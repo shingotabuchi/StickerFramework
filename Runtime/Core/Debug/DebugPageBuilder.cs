@@ -76,6 +76,18 @@ namespace StickerFwk.Core.Debug
             return this;
         }
 
+        public IDebugPageBuilder Dropdown(string text, Func<IReadOnlyList<string>> getOptions, Func<int> getIndex, Action<int> setIndex)
+        {
+            Widgets.Add(new DropdownWidget
+            {
+                Text = text,
+                GetOptions = getOptions,
+                GetIndex = getIndex,
+                SetIndex = setIndex
+            });
+            return this;
+        }
+
         public IDebugPageBuilder PageLink(string text, IDebugPage target)
         {
             Widgets.Add(new PageLinkWidget { Text = text, Target = target });

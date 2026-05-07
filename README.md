@@ -71,7 +71,7 @@ Packages/com.stickerfwk.core/
 | `AssetManagement/` | `IAssetRequester` | Async asset loading contract |
 | `Camera/` | `ICameraService`, `CameraId`, `CameraFitter`, `CameraExtensions` | Camera registration and query contracts |
 | `Diagnostics/` | `Assert`, `Log` | Debug assertion and logging wrappers |
-| `Initialization/` | `IRootInitService` | App startup contract |
+| `Initialization/` | `IRootInitService`, `RootInitSettings` | App startup contract and configuration asset |
 | `Input/` | `IInputService`, `IRawInputService`, `IInputLockService`, `InputLockService`, `InputLockChangedEvent` | Input abstraction with ref-counted locking |
 | `InspectorTools/` | `ButtonAttribute` | Custom inspector attributes |
 | `MasterData/` | `IMasterData`, `IMasterDataRepository`, `IMasterDataScriptableObject`, `MasterAsset<T>`, `MasterData<T>` | Static data loading and query |
@@ -89,7 +89,7 @@ Packages/com.stickerfwk.core/
 |---|---|---|
 | `AssetManagement/` | `AddressableCache`, `AddressableHandle<T>`, `AddressableManager`, `IAddressableHandle` | Addressables-backed asset loading |
 | `Camera/` | `CameraService`, `CameraModel`, `ManagedCamera`, `CameraRegisteredEvent` | Camera registry implementation |
-| `Initialization/` | `RootInitService` | Startup sequence (frame rate, master data) |
+| `Initialization/` | `RootInitService`, `RootInitContainerBuilderExtensions` | Startup sequence (frame rate from `RootInitSettings`, master data) |
 | `Input/` | `InputService`, `LockingInputService`, `WorldRaycastService` | Input System wrappers |
 | `MasterData/` | `MasterDataRepository` | Addressables-backed master data loading |
 | `Rendering/` | `BlurService`, `BlurVolume`, `ManagedBlurVolume`, `DualKawaseBlurFeature`, `DualKawaseBlurPass`, `CachedBlurBlitPass` | URP dual-Kawase blur pipeline |
@@ -182,7 +182,7 @@ Six `.asmdef` files define compilation boundaries and dependency edges.
 
 | Assembly | Root Namespace | Location | Key References |
 |---|---|---|---|
-| `StickerFwk.Core` | `StickerFwk.Core` | `Runtime/Core/` | UniTask, R3.Unity, VContainer, MessagePipe, URP |
+| `StickerFwk.Core` | `StickerFwk.Core` | `Runtime/Core/` | UniTask, R3.Unity, VContainer, MessagePipe, Unity.RenderPipelines.Core.Runtime (for `Volume` on `IBlurService`) |
 | `StickerFwk.Infrastructure` | `StickerFwk.Infrastructure` | `Runtime/Infrastructure/` | StickerFwk.Core, Unity.Addressables, Unity.ResourceManager, Unity.InputSystem, UniTask, R3.Unity, VContainer, MessagePipe |
 | `StickerFwk.Infrastructure.Camera` | `StickerFwk.Infrastructure.Camera` | `Runtime/Infrastructure/Camera/` | StickerFwk.Core, VContainer, MessagePipe, UniTask |
 | `StickerFwk.Infrastructure.Rendering` | `StickerFwk.Infrastructure.Rendering` | `Runtime/Infrastructure/Rendering/` | StickerFwk.Core, VContainer, UniTask, MessagePipe, URP |
@@ -362,7 +362,7 @@ Assets/Scripts/Runtime/Features/<FeatureName>/Presentation/
 | **Unity Addressables** | Async asset loading | Yes |
 | **Unity Input System** | Modern input handling | Yes |
 | **URP (Universal Render Pipeline)** | Blur/rendering features | Yes |
-| **Unity Timeline** | Loop track support | Optional |
+| **Unity Timeline** | Loop track support | Yes |
 
-Install these via Unity Package Manager or your project's `manifest.json` before
+These are declared in `package.json` so Unity Package Manager resolves them when
 importing `com.stickerfwk.core`.

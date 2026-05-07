@@ -6,7 +6,6 @@
         "R3.Unity",
         "VContainer",
         "MessagePipe",
-        "Unity.RenderPipelines.Universal.Runtime",
         "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],

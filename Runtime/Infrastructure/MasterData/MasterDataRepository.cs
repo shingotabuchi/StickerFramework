@@ -47,8 +47,10 @@ namespace StickerFwk.Infrastructure.MasterData
                 var so = _assetRequester.GetAssetImmediate<ScriptableObject>(key);
                 if (so is not IMasterDataScriptableObject masterDataSo)
                 {
-                    Log.Warning($"Asset '{key}' is not an IMasterDataScriptableObject. Skipping.");
-                    continue;
+                    var actualType = so != null ? so.GetType().Name : "null";
+                    throw new InvalidOperationException(
+                        $"Asset '{key}' loaded under label '{MasterDataLabel}' is not an {nameof(IMasterDataScriptableObject)} (actual type: {actualType}). " +
+                        "All assets tagged with the MasterData label must implement IMasterDataScriptableObject.");
                 }
 
                 var type = masterDataSo.Type;
@@ -70,8 +72,9 @@ namespace StickerFwk.Infrastructure.MasterData
                 {
                     if (!index.TryAdd(entry.Id, entry))
                     {
-                        Log.Warning($"Duplicate master data id '{entry.Id}' in {type.Name}. Skipping duplicate.");
-                        continue;
+                        throw new InvalidOperationException(
+                            $"Duplicate master data id '{entry.Id}' detected for type {type.Name} while loading asset '{key}'. " +
+                            "Master data ids must be unique within a type.");
                     }
 
                     table.Add(entry);

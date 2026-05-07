@@ -37,6 +37,12 @@ namespace StickerFwk.Core.Debug
         /// <summary>Selection grid over the values of <typeparamref name="TEnum"/>.</summary>
         IDebugPageBuilder EnumDropdown<TEnum>(string text, Func<TEnum> get, Action<TEnum> set) where TEnum : struct, Enum;
 
+        /// <summary>
+        /// Expandable dropdown over a dynamic string list. The current selection is shown as a button
+        /// label; tapping it expands a vertical list of choices. Tapping a choice collapses the list.
+        /// </summary>
+        IDebugPageBuilder Dropdown(string text, Func<System.Collections.Generic.IReadOnlyList<string>> getOptions, Func<int> getIndex, Action<int> setIndex);
+
         /// <summary>Pushes <paramref name="target"/> onto the navigation stack when tapped.</summary>
         IDebugPageBuilder PageLink(string text, IDebugPage target);
 

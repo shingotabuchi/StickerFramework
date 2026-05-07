@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core.UI;
@@ -22,8 +23,8 @@ namespace StickerFwk.Infrastructure.UI
             var director = isShow ? _showDirector : _hideDirector;
             if (director == null)
             {
-                canvasGroup.alpha = isShow ? 1f : 0f;
-                return;
+                var direction = isShow ? "show" : "hide";
+                throw new InvalidOperationException($"Timeline transition is missing its {direction} PlayableDirector.");
             }
 
             await director.PlayAsync(ct);

@@ -30,27 +30,10 @@ namespace StickerFwk.Core
             Func<UniTask> operation,
             CancellationToken cancellationToken = default)
         {
-            while (true)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            cancellationToken.ThrowIfCancellationRequested();
 
-                var task = WaitOrRunInternal(key, operation, out var isOwner);
-                try
-                {
-                    await task;
-                    return;
-                }
-                catch (Exception)
-                {
-                    if (!isOwner)
-                    {
-                        await UniTask.Yield();
-                        continue;
-                    }
-
-                    throw;
-                }
-            }
+            var task = WaitOrRunInternal(key, operation, out _);
+            await task.AttachExternalCancellation(cancellationToken);
         }
 
         public void CancelAll()

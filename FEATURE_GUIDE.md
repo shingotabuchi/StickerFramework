@@ -215,12 +215,10 @@ namespace App.Features.Plinko
 
 ### 4. Window (View) — UI Display
 
-Extends `WindowView`. Thin — holds serialized UI references, displays values provided by the presenter, exposes input subscriptions, and forwards lifecycle hooks to the presenter.
+Extends `WindowView<TSelf, TPresenter>`. Thin — holds serialized UI references, displays values provided by the presenter, and exposes input subscriptions. The generic base **automatically forwards every lifecycle hook** (`OnInitialize`, `OnBeforeShow`, `OnShow`, `OnBeforeHide`, `OnHide`, `OnDispose`) to the presenter, so you can't accidentally forget to dispose the presenter and leak it.
 
 ```csharp
 using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using StickerFwk.Core.UI;
 using UnityEngine;
 using UnityEngine.UI;
@@ -228,39 +226,16 @@ using VContainer;
 
 namespace App.Features.Plinko
 {
-    public class PlinkoWindow : WindowView
+    public class PlinkoWindow : WindowView<PlinkoWindow, PlinkoPresenter>
     {
         [SerializeField] Text _scoreText;
         [SerializeField] Text _ballsText;
         [SerializeField] CoolButton _dropButton;
 
-        PlinkoPresenter _presenter;
-
         [Inject]
         public void Construct(PlinkoPresenter presenter)
         {
-            _presenter = presenter;
-            _presenter.Bind(this);
-        }
-
-        public override UniTask OnInitialize(CancellationToken ct)
-        {
-            return _presenter.InitializeAsync(ct);
-        }
-
-        protected override void OnShowInternal()
-        {
-            _presenter.OnShow();
-        }
-
-        protected override void OnHideInternal()
-        {
-            _presenter.OnHide();
-        }
-
-        protected override void OnDisposeInternal()
-        {
-            _presenter.Dispose();
+            BindPresenter(presenter);
         }
 
         public IDisposable AddDropListener(Action listener)
@@ -289,7 +264,7 @@ namespace App.Features.Plinko
 **Prefab setup:**
 1. Create a UI prefab with `PlinkoWindow` component attached
 2. It auto-requires `CanvasGroup` (from `WindowView`)
-3. Configure in Inspector: Layer = `Window`, ShowTransition = `Fade`, etc.
+3. Configure in Inspector: Layer = `UI` (or `UIOverlay` / `Wipe`), ShowTransition = `Fade`, etc.
 4. Mark as Addressable with key `Views/PlinkoWindow.prefab`
 
 ### 5. LifetimeScope — DI Registration
@@ -415,7 +390,9 @@ public class RootLifetimeScope : LifetimeScope
         builder.Register<IMasterDataRepository, MasterDataRepository>(Lifetime.Singleton);
 
         // Initialization
-        builder.Register<IRootInitService, RootInitService>(Lifetime.Singleton).AsImplementedInterfaces();
+        // Pass a RootInitSettings asset to override Application.targetFrameRate at startup;
+        // omit the argument to leave Unity's platform default in place.
+        builder.UseRootInit(/* rootInitSettingsAsset */);
 
         // Rendering
         builder.Register<IBlurService, BlurService>(Lifetime.Singleton);

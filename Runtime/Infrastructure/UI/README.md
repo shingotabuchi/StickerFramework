@@ -23,7 +23,7 @@ A general-purpose UI framework for managing windows (menus, HUD, popups, dialogs
 
 - **Push**: Open a new window on top of the stack.
 - **Pop**: Close the top window of a layer (`Pop(UILayer)`), the topmost window of a given type (`Pop<T>()`), or a specific window instance regardless of position (`Pop(WindowView)`).
-- **Replace**: Close the current top window and push a new one.
+- **Replace**: Close the current top window of the new window's layer and push the new one. The target layer is taken from the prefab, so the pop and the push are guaranteed to happen on the same layer.
 - **PopAll**: Clear all windows from a layer.
 - **IsOpen\<T\>** / **GetWindow\<T\>**: Query whether a specific window type is open.
 - **GetStackCount**: Check the stack size for a given layer.
@@ -31,22 +31,30 @@ A general-purpose UI framework for managing windows (menus, HUD, popups, dialogs
 
 > `Pop(WindowView)` removes a buried window without playing its hide transition (it isn't visible) but still fires `OnBeforeHide` / `OnHide` and publishes `WindowClosedEvent`. Top-of-layer pops use the normal transition path.
 
+### Concurrency
+
+- `Push` / `Pop` / `Replace` / `PopAll` are safe to call from overlapping async flows. Operations on the **same layer** are serialized through a per-layer FIFO queue so stack ordering, blocker bookkeeping, and `interactable` toggling cannot interleave. Different layers run concurrently.
+- Asset loads happen **outside** the layer lock, so two pushes on the same layer can still load their prefabs in parallel; only the stack-mutating + transition phase is serialized.
+- `Pop<T>()` and `Pop(WindowView)` need to find the owning layer first; they take a brief global lock for the lookup, then hand off to the per-layer lock.
+- Each call honors its own `CancellationToken`. Cancelling one caller (even while it is still queued behind an earlier op) does not affect other queued or running ops.
+- `Dispose` cancels all queued and in-flight ops; their tokens fire `OperationCanceledException` and they unwind cleanly before the service tears down its stacks.
+
 ## R3: Fixed Layer System
 
-Predefined layers with fixed sort orders (`UILayer` enum). Each layer has its own Canvas with a dedicated sorting order, created by `UILayerManager` at initialization:
+Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Core/UI/UILayer.cs`). Each layer is bound to a dedicated `CameraId` and gets its own Canvas, created on demand by `UILayerManager`:
 
-| Layer | Sort Order | Purpose |
-|-------|-----------|---------|
-| **Background** | 0 | Full-screen backgrounds, skyboxes |
-| **HUD** | 100 | Always-visible gameplay UI (health, score) |
-| **Window** | 200 | Standard menu screens (settings, inventory) |
-| **Popup** | 300 | Popups, tooltips, notifications |
-| **Modal** | 400 | Confirmation dialogs, blocking overlays |
-| **Overlay** | 500 | System-level (loading screens, fade) |
+| Layer | Sort Order | Bound Camera (`CameraId`) | Purpose |
+|-------|-----------|---------------------------|---------|
+| **UI** | 100 | `CameraId.UI` | Standard in-game UI (HUD, menus, popups, modals) |
+| **UIOverlay** | 200 | `CameraId.UIOverlay` | UI that must render above the main UI camera |
+| **Wipe** | 300 | `CameraId.Wipe` | Full-screen scene-transition wipes |
 
-- Windows specify which layer they belong to via the `Layer` field on `WindowView`.
-- Layer Canvases are created once at system initialization under a `[UI Root]` GameObject (DontDestroyOnLoad) and persist for the app lifetime.
-- Each Canvas is configured with `ScreenSpaceOverlay` render mode, a `CanvasScaler` (1920×1080 reference, 0.5 match), and a `GraphicRaycaster`.
+- Windows specify which layer they belong to via the `Layer` field on `WindowView` (default `UILayer.UI`).
+- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — apply the appropriate `CameraProfile` first.
+- Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
+- `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that swap camera profiles).
+
+Need a Canvas authored in the scene (boot splash, version label, debug overlay)? Use `CanvasCameraBinder` instead — see **R11**. The `UILayer` enum is reserved for windows pushed through `IUIService`.
 
 ## R4: Modal / Input Blocking
 
@@ -80,12 +88,15 @@ Predefined layers with fixed sort orders (`UILayer` enum). Each layer has its ow
 - The system handles load failures gracefully (logs error, does not break the stack).
 - Asset handles are released when windows are disposed.
 
-## R7: Dependency Injection (Child LifetimeScope)
+## R7: Dependency Injection (Per-Push Resolver)
 
-- Each window instance gets its own **child LifetimeScope** scoped to the window's lifetime.
-- The child scope is created when the window is instantiated and disposed when the window is destroyed.
-- Window-specific services are registered in the child scope.
-- The window's View (MonoBehaviour) is injected via `VContainer.InjectGameObject()`.
+- `UIService` does **not** create a child `LifetimeScope` per window. There is no per-window scope to dispose.
+- After instantiating a window prefab, `UIService.PushInternal` calls `resolver.InjectGameObject(instance)` to populate `[Inject]` members on the window's MonoBehaviour and its children.
+- The resolver used is, in order of preference:
+  1. `WindowOptions.Resolver` if the caller passed one (typically a feature/scene child scope's `IObjectResolver`),
+  2. otherwise the `IObjectResolver` that was injected into `UIService` itself (the scope where `UIService` was registered — usually the root scope).
+- Feature-specific dependencies are made available to a window by **building a child `LifetimeScope` yourself** and passing its `IObjectResolver` via `WindowOptions.Resolver` on `Push` / `Replace`. The child scope's lifetime, including any services it owns, is the caller's responsibility.
+- For automatic teardown of windows pushed from a scope, register a `ScopedUIService` (see **R12**). It wraps `IUIService` and pops tracked windows when the scope disposes — but it still does not create per-window scopes.
 
 ## R8: MessagePipe Events
 

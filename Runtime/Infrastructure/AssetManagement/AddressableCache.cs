@@ -102,10 +102,10 @@ namespace StickerFwk.Infrastructure.AssetManagement
         {
             if (_isDisposed) throw new ObjectDisposedException(nameof(AddressableCache));
 
-            if (TryGetHandle(key, out var handle)) return handle.Object as T;
+            if (TryGetHandle(key, out var handle)) return GetTypedAsset<T>(key, handle);
 
-            Log.Warning($"No handle found for key '{key}'. Returning null.");
-            return null;
+            throw new KeyNotFoundException(
+                $"No handle found for key '{key}'. The asset must be loaded (e.g. via Preload or RequestAsset) before calling GetAssetImmediate.");
         }
 
         public async UniTask<IAssetHandle> Preload<T>(
@@ -114,29 +114,13 @@ namespace StickerFwk.Infrastructure.AssetManagement
             IProgress<float> progress = null
         ) where T : Object
         {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(AddressableCache));
+            var dedupedKeys = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var key in keys)
+                if (seen.Add(key)) dedupedKeys.Add(key);
 
-            var keysList = new List<string>(keys);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-            using var _ = PoolScope.List<UniTask>(out var tasks);
-            foreach (var key in keysList)
-            {
-                AddRef(key);
-                if (TryGetHandle(key, out var handle)) continue;
-
-                tasks.Add(LoadAsync<T>(key, linkedCts.Token, progress));
-            }
-
-            try
-            {
-                await UniTask.WhenAll(tasks);
-                return new PreloadHandle(keysList, this);
-            }
-            catch
-            {
-                Release(keysList);
-                throw;
-            }
+            await PreloadInternal<T>(dedupedKeys, cancellationToken, progress);
+            return new PreloadHandle(dedupedKeys, this);
         }
 
         public async UniTask<IPreloadHandle> PreloadFromLabel<T>(
@@ -239,39 +223,31 @@ namespace StickerFwk.Infrastructure.AssetManagement
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
 
-            Log.Info($"Start Loading asset with key '{key}'...");
-            var retryCount = 0;
-            while (true)
+            Log.Info($"Loading asset with key '{key}'...");
+
+            if (TryGetHandle(key, out var handle)) return GetTypedAsset<T>(key, handle);
+
+            try
             {
-                Log.Info($"Loading asset with key '{key}'...");
-                if (_isDisposed) throw new ObjectDisposedException(nameof(AddressableCache));
-
-                if (TryGetHandle(key, out var handle)) return handle.Object as T;
-
-                try
-                {
-                    await _loadingGate.WaitOrRun(key, LoadAsyncInternal, linkedCts.Token);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"Existing loading task for key '{key}' failed: {ex}");
-                    throw;
-                }
-
-                if (TryGetHandle(key, out var loadedHandle)) return loadedHandle.Object as T;
-
-                retryCount++;
-                if (retryCount <= 3)
-                {
-                    Log.Warning(
-                        $"Loaded task completed but handle missing for key '{key}'. Retrying (attempt {retryCount}/3)...");
-                    await UniTask.Yield();
-                    continue;
-                }
-
-                Log.Error($"Failed to load asset of key '{key}' after loading task completed.");
-                throw new Exception($"Failed to load asset of key '{key}'.");
+                await _loadingGate.WaitOrRun(key, LoadAsyncInternal, linkedCts.Token);
             }
+            catch (Exception ex)
+            {
+                Log.Error($"Loading task for key '{key}' failed: {ex}");
+                throw;
+            }
+
+            if (_isDisposed) throw new ObjectDisposedException(nameof(AddressableCache));
+
+            if (!TryGetHandle(key, out var loadedHandle))
+            {
+                // LoadAsyncInternal guarantees _handles[key] is set on success or throws.
+                // Reaching here means an invariant was violated (e.g. external Release racing the load).
+                throw new InvalidOperationException(
+                    $"Loading task for key '{key}' completed but no handle was cached.");
+            }
+
+            return GetTypedAsset<T>(key, loadedHandle);
 
             async UniTask LoadAsyncInternal()
             {
@@ -380,6 +356,24 @@ namespace StickerFwk.Infrastructure.AssetManagement
             }
 
             return TryReleaseHandle(key);
+        }
+
+        internal static T GetTypedAsset<T>(string key, IAddressableHandle handle) where T : Object
+        {
+            if (handle == null)
+            {
+                throw new ArgumentNullException(nameof(handle));
+            }
+
+            var asset = handle.Object;
+            if (asset is T typedAsset)
+            {
+                return typedAsset;
+            }
+
+            var actualType = asset != null ? asset.GetType().Name : "null";
+            throw new InvalidOperationException(
+                $"Addressable asset '{key}' was requested as {typeof(T).Name}, but the cached asset is {actualType}.");
         }
     }
 }

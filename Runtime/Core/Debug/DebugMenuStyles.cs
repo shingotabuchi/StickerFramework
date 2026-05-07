@@ -23,50 +23,85 @@ namespace StickerFwk.Core.Debug
         public GUILayoutOption WidgetHeight;
 
         private bool _initialized;
+        private Texture2D _panelBackgroundTexture;
+        private Color _cachedPanelBackgroundColor;
 
         public void EnsureInitialized(DebugMenuSettings settings)
         {
-            if (_initialized)
+            if (!_initialized)
             {
-                return;
+                _initialized = true;
+
+                LabelWidth = settings.LabelWidth;
+                WidgetHeight = GUILayout.Height(settings.WidgetHeight);
+
+                _panelBackgroundTexture = CreateSolidTexture(settings.PanelBackgroundColor);
+                _cachedPanelBackgroundColor = settings.PanelBackgroundColor;
+
+                Window = new GUIStyle(GUI.skin.box) { padding = new RectOffset(8, 8, 8, 8) };
+                Window.normal.background = _panelBackgroundTexture;
+                TitleLabel = new GUIStyle(GUI.skin.label)
+                {
+                    fontStyle = FontStyle.Bold,
+                    fontSize = settings.TitleFontSize,
+                    alignment = TextAnchor.MiddleCenter
+                };
+                Label = new GUIStyle(GUI.skin.label) { richText = true, wordWrap = true, fontSize = settings.FontSize };
+                Button = new GUIStyle(GUI.skin.button)
+                {
+                    alignment = TextAnchor.MiddleLeft,
+                    padding = new RectOffset(10, 10, 6, 6),
+                    fontSize = settings.FontSize
+                };
+                ToggleButton = new GUIStyle(GUI.skin.button)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    padding = new RectOffset(6, 6, 4, 4),
+                    fontSize = settings.ButtonFontSize,
+                    fontStyle = FontStyle.Bold
+                };
+                SmallButton = new GUIStyle(GUI.skin.button)
+                {
+                    padding = new RectOffset(8, 8, 4, 4),
+                    fontSize = settings.FontSize
+                };
+                Toggle = new GUIStyle(GUI.skin.toggle)
+                {
+                    padding = new RectOffset(20, 4, 2, 2),
+                    fontSize = settings.FontSize
+                };
+                TextField = new GUIStyle(GUI.skin.textField) { fontSize = settings.FontSize };
             }
-            _initialized = true;
 
-            LabelWidth = settings.LabelWidth;
-            WidgetHeight = GUILayout.Height(settings.WidgetHeight);
+            // Live-refresh colors so tweaks in Project Settings apply during Play without a restart.
+            SeparatorColor = settings.SeparatorColor;
+            if (settings.PanelBackgroundColor != _cachedPanelBackgroundColor || _panelBackgroundTexture == null)
+            {
+                _cachedPanelBackgroundColor = settings.PanelBackgroundColor;
+                if (_panelBackgroundTexture != null)
+                {
+                    Object.Destroy(_panelBackgroundTexture);
+                }
+                _panelBackgroundTexture = CreateSolidTexture(_cachedPanelBackgroundColor);
+                if (Window != null)
+                {
+                    Window.normal.background = _panelBackgroundTexture;
+                }
+            }
+        }
 
-            Window = new GUIStyle(GUI.skin.box) { padding = new RectOffset(8, 8, 8, 8) };
-            TitleLabel = new GUIStyle(GUI.skin.label)
+        private static Texture2D CreateSolidTexture(Color color)
+        {
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, mipChain: false)
             {
-                fontStyle = FontStyle.Bold,
-                fontSize = settings.TitleFontSize,
-                alignment = TextAnchor.MiddleCenter
+                hideFlags = HideFlags.HideAndDontSave,
+                name = "DebugMenuPanelBackground",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
             };
-            Label = new GUIStyle(GUI.skin.label) { richText = true, wordWrap = true, fontSize = settings.FontSize };
-            Button = new GUIStyle(GUI.skin.button)
-            {
-                alignment = TextAnchor.MiddleLeft,
-                padding = new RectOffset(10, 10, 6, 6),
-                fontSize = settings.FontSize
-            };
-            ToggleButton = new GUIStyle(GUI.skin.button)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                padding = new RectOffset(6, 6, 4, 4),
-                fontSize = settings.ButtonFontSize,
-                fontStyle = FontStyle.Bold
-            };
-            SmallButton = new GUIStyle(GUI.skin.button)
-            {
-                padding = new RectOffset(8, 8, 4, 4),
-                fontSize = settings.FontSize
-            };
-            Toggle = new GUIStyle(GUI.skin.toggle)
-            {
-                padding = new RectOffset(20, 4, 2, 2),
-                fontSize = settings.FontSize
-            };
-            TextField = new GUIStyle(GUI.skin.textField) { fontSize = settings.FontSize };
+            tex.SetPixel(0, 0, color);
+            tex.Apply();
+            return tex;
         }
     }
 }

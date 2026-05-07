@@ -1,0 +1,22 @@
+{
+    "name": "StickerFwk.Tests.Runtime",
+    "rootNamespace": "StickerFwk.Tests.Runtime",
+    "references": [
+        "StickerFwk.Core",
+        "StickerFwk.Infrastructure",
+        "StickerFwk.Infrastructure.UI",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

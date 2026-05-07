@@ -33,8 +33,9 @@ This:
 ### Customizing layout
 
 `DebugMenuSettings` is a `ScriptableObject` configuring everything visual: toggle-button corner /
-size / text / margin, panel width / margin / height, UI scale, font sizes, widget height, and
-label column width.
+size / text / margin, panel width / margin / height, UI scale, font sizes, widget height,
+label column width, and panel colors (`PanelBackgroundColor`, `SeparatorColor`). Color tweaks
+are picked up live during Play without a domain reload.
 
 Create one via **Assets → Create → Sticker → Framework → Debug Menu Settings**, edit it in the
 inspector, then drag it onto the **Debug Menu Settings** field of your root `LifetimeScope`. The
@@ -100,6 +101,7 @@ fields and are re-read on every render.
 | `IntSlider(text, get, set, min, max)`                                 | Int slider.                                         |
 | `TextField(text, get, set)`                                           | Single-line text input.                             |
 | `EnumDropdown<TEnum>(text, get, set)`                                 | Selection grid over enum values.                    |
+| `Dropdown(text, getOptions, getIndex, setIndex)`                      | Expandable dropdown over a dynamic string list.     |
 | `PageLink(text, page)` / `PageLink(text, factory)`                    | Push another page onto the navigation stack.        |
 | `Separator()`                                                         | Thin horizontal divider.                            |
 

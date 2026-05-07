@@ -40,6 +40,10 @@ namespace StickerFwk.Core.Debug
         [SerializeField, Min(16f)] private float _widgetHeight = 40f;
         [SerializeField, Min(40f)] private float _labelWidth = 140f;
 
+        [Header("Colors")]
+        [SerializeField] private Color _panelBackgroundColor = new Color(0f, 0f, 0f, 0.85f);
+        [SerializeField] private Color _separatorColor = new Color(1f, 1f, 1f, 0.2f);
+
         public DebugMenuButtonCorner ButtonCorner => _buttonCorner;
         /// <summary>Button height in pixels (before <see cref="UiScale"/>).</summary>
         public float ButtonSize => _buttonSize;
@@ -69,6 +73,12 @@ namespace StickerFwk.Core.Debug
         public int TitleFontSize => _titleFontSize > 0 ? _titleFontSize : 24;
         public float WidgetHeight => _widgetHeight;
         public float LabelWidth => _labelWidth;
+
+        /// <summary>Background color used to fill the panel area. Alpha controls translucency.</summary>
+        public Color PanelBackgroundColor => _panelBackgroundColor;
+
+        /// <summary>Color of the thin divider drawn by <c>Separator()</c> widgets.</summary>
+        public Color SeparatorColor => _separatorColor;
 
         private static DebugMenuSettings _default;
 

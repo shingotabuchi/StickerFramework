@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core;
 using StickerFwk.Core.AssetManagement;
+using VContainer;
 using Object = UnityEngine.Object;
 
 namespace StickerFwk.Infrastructure.AssetManagement
@@ -81,6 +82,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
         private bool _isDisposed;
         private Dictionary<string, int> _refCounts = new();
 
+        [Inject]
         public AddressableCache() : this(DefaultAddressableLoader.Instance)
         {
         }

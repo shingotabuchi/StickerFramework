@@ -359,8 +359,6 @@ namespace StickerFwk.Infrastructure.UI
             var prefabWindow = windowAsset.PrefabWindow;
 
             var isBlocking = options?.IsBlocking ?? prefabWindow.IsBlocking;
-            var showTrans = options?.ShowTransition ?? prefabWindow.ShowTransition;
-            var hideTrans = options?.HideTransition ?? prefabWindow.HideTransition;
             var transDuration = options?.TransitionDuration ?? prefabWindow.TransitionDuration;
 
             var stack = _stacks[layer];
@@ -413,6 +411,12 @@ namespace StickerFwk.Infrastructure.UI
                 }
 
                 await windowView.OnInitialize(ct);
+
+                // Read transitions from the INSTANCE, not the prefab — SerializeReference
+                // strategy data lives inline and any UnityEngine.Object refs inside it are
+                // remapped only on the cloned instance.
+                var showTrans = options?.ShowTransition ?? windowView.ShowTransition;
+                var hideTrans = options?.HideTransition ?? windowView.HideTransition;
 
                 windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle, hideTrans, transDuration);
                 stack.Push(windowHandle);

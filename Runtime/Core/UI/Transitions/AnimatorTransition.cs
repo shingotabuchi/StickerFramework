@@ -8,17 +8,13 @@ namespace StickerFwk.Core.UI
     [Serializable]
     public sealed class AnimatorTransition : ITransition
     {
+        [SerializeField] Animator _animator;
         [SerializeField] string _showState = "Show";
         [SerializeField] string _hideState = "Hide";
 
         public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
         {
-            var animator = view.GetComponent<Animator>();
-            if (animator == null)
-            {
-                var targets = view.GetComponent<AnimatorTransitionTargets>();
-                animator = targets != null ? targets.Animator : null;
-            }
+            var animator = _animator != null ? _animator : view.GetComponent<Animator>();
             if (animator == null)
             {
                 view.CanvasGroup.alpha = isShow ? 1f : 0f;

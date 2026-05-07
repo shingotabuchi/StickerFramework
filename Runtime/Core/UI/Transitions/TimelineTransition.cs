@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 using UnityEngine.Playables;
 
 namespace StickerFwk.Core.UI
@@ -8,21 +9,16 @@ namespace StickerFwk.Core.UI
     [Serializable]
     public sealed class TimelineTransition : ITransition
     {
+        [SerializeField] PlayableDirector _showDirector;
+        [SerializeField] PlayableDirector _hideDirector;
+
         public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
         {
-            var targets = view.GetComponent<TimelineTransitionTargets>();
-            if (targets == null)
-            {
-                throw new InvalidOperationException(
-                    $"Window '{view.name}' uses TimelineTransition but is missing a {nameof(TimelineTransitionTargets)} component on its root.");
-            }
-
-            var director = isShow ? targets.ShowDirector : targets.HideDirector;
+            var director = isShow ? _showDirector : _hideDirector;
             if (director == null)
             {
                 var direction = isShow ? "show" : "hide";
-                throw new InvalidOperationException(
-                    $"{nameof(TimelineTransitionTargets)} on window '{view.name}' is missing its {direction} PlayableDirector.");
+                throw new InvalidOperationException($"Timeline transition is missing its {direction} PlayableDirector.");
             }
 
             await director.PlayAsync(ct);

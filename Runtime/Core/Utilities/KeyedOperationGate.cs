@@ -12,32 +12,33 @@ namespace StickerFwk.Core
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Thread-safety:</b> This type is <b>not</b> thread-safe. The internal dictionary is
-    /// accessed without synchronization, so all members must be invoked from a single thread.
-    /// </para>
-    /// <para>
-    /// In typical Unity + UniTask usage this is fine because UniTask continuations resume on the
-    /// Unity main thread (PlayerLoop) by default, so callers that only ever invoke this gate from
-    /// the main thread are safe. If you await operations that resume on a background thread (for
-    /// example via <c>UniTask.SwitchToThreadPool</c>) and then call back into the gate, you must
-    /// switch back to the main thread first, or provide your own synchronization.
+    /// <b>Thread-safety:</b> All access to the in-flight dictionary is guarded by an internal
+    /// lock, so the gate is safe to call from any thread. Continuations of the awaited task
+    /// resume on whatever <see cref="System.Threading.SynchronizationContext"/> the caller was
+    /// on — typical Unity + UniTask usage resumes on the main thread, but if you await operations
+    /// that resume on a background thread, that's fine: the next gate call will lock as needed.
     /// </para>
     /// </remarks>
     public sealed class KeyedOperationGate<TKey>
     {
         private readonly Dictionary<TKey, UniTaskCompletionSource<bool>> _inflight = new();
+        private readonly object _lock = new();
 
         private UniTask WaitOrRunInternal(TKey key, Func<UniTask> operation, out bool isOwner)
         {
-            if (_inflight.TryGetValue(key, out var existing))
+            UniTaskCompletionSource<bool> completionSource;
+            lock (_lock)
             {
-                isOwner = false;
-                return existing.Task;
-            }
+                if (_inflight.TryGetValue(key, out var existing))
+                {
+                    isOwner = false;
+                    return existing.Task;
+                }
 
-            var completionSource = new UniTaskCompletionSource<bool>();
-            _inflight[key] = completionSource;
-            isOwner = true;
+                completionSource = new UniTaskCompletionSource<bool>();
+                _inflight[key] = completionSource;
+                isOwner = true;
+            }
 
             RunOperation(key, operation, completionSource).Forget();
             return completionSource.Task;
@@ -56,11 +57,22 @@ namespace StickerFwk.Core
 
         public void CancelAll()
         {
-            foreach (var completionSource in _inflight.Values)
+            UniTaskCompletionSource<bool>[] sources;
+            lock (_lock)
             {
-                completionSource.TrySetCanceled();
+                sources = new UniTaskCompletionSource<bool>[_inflight.Count];
+                var i = 0;
+                foreach (var cs in _inflight.Values)
+                {
+                    sources[i++] = cs;
+                }
+                _inflight.Clear();
             }
-            _inflight.Clear();
+
+            foreach (var cs in sources)
+            {
+                cs.TrySetCanceled();
+            }
         }
 
         private async UniTaskVoid RunOperation(TKey key, Func<UniTask> operation, UniTaskCompletionSource<bool> completionSource)
@@ -80,7 +92,14 @@ namespace StickerFwk.Core
             }
             finally
             {
-                _inflight.Remove(key);
+                lock (_lock)
+                {
+                    // Only remove if we're still the owner — CancelAll may have replaced or cleared us.
+                    if (_inflight.TryGetValue(key, out var current) && ReferenceEquals(current, completionSource))
+                    {
+                        _inflight.Remove(key);
+                    }
+                }
             }
         }
     }

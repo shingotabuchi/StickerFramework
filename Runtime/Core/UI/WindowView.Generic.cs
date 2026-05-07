@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core.Presentation;
+using VContainer;
 
 namespace StickerFwk.Core.UI
 {
@@ -11,6 +12,13 @@ namespace StickerFwk.Core.UI
     /// <see cref="WindowView.OnDispose"/> to the presenter so consumers can't forget to dispose it
     /// and leak the presenter (and any subscriptions it owns).
     /// </summary>
+    /// <remarks>
+    /// The presenter is automatically resolved and bound by VContainer via the <c>[Inject]</c>
+    /// method on this base class — derived types just need to register their concrete presenter
+    /// type in the parent scope. If you need to bind a presenter manually (tests, non-DI scenarios),
+    /// call <see cref="BindPresenter"/> explicitly before <see cref="WindowView.OnInitialize"/>
+    /// runs.
+    /// </remarks>
     /// <typeparam name="TSelf">The concrete window type (CRTP).</typeparam>
     /// <typeparam name="TPresenter">The presenter type bound to this window.</typeparam>
     public abstract class WindowView<TSelf, TPresenter> : WindowView
@@ -22,9 +30,21 @@ namespace StickerFwk.Core.UI
         protected TPresenter Presenter => _presenter;
 
         /// <summary>
-        /// Stores the presenter and binds it to this view. Call this from the consumer's
-        /// DI construction method (e.g. a VContainer <c>[Inject]</c> method). The framework
-        /// then takes care of forwarding every lifecycle hook automatically.
+        /// VContainer construct injection entry point. Resolves the presenter from the active
+        /// scope and binds it. Idempotent: if a presenter is already bound (e.g. via a manual
+        /// <see cref="BindPresenter"/> call from a test) and the resolved instance matches, the
+        /// call is a no-op.
+        /// </summary>
+        [Inject]
+        public void InjectPresenter(TPresenter presenter)
+        {
+            BindPresenter(presenter);
+        }
+
+        /// <summary>
+        /// Stores the presenter and binds it to this view. Normally invoked automatically through
+        /// the <c>[Inject]</c> hook, but exposed for tests and non-DI scenarios where a presenter
+        /// must be supplied directly.
         /// </summary>
         protected void BindPresenter(TPresenter presenter)
         {

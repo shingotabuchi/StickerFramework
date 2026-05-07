@@ -114,10 +114,15 @@ namespace StickerFwk.Infrastructure.AssetManagement
             IProgress<float> progress = null
         ) where T : Object
         {
+            // Materialize + dedupe once. PreloadHandle needs the unique key list to release the
+            // exact same set of refcounts on disposal, so the list has to escape the pooled
+            // scope; PreloadInternal trusts the caller to have already deduped.
             var dedupedKeys = new List<string>();
-            var seen = new HashSet<string>();
-            foreach (var key in keys)
-                if (seen.Add(key)) dedupedKeys.Add(key);
+            using (PoolScope.HashSet<string>(out var seen))
+            {
+                foreach (var key in keys)
+                    if (seen.Add(key)) dedupedKeys.Add(key);
+            }
 
             await PreloadInternal<T>(dedupedKeys, cancellationToken, progress);
             return new PreloadHandle(dedupedKeys, this);
@@ -128,6 +133,8 @@ namespace StickerFwk.Infrastructure.AssetManagement
             CancellationToken token = default,
             IProgress<float> progress = null) where T : Object
         {
+            // Addressables guarantees each label resolves to a unique set of keys, so no extra
+            // dedupe is required before handing them to PreloadInternal.
             var keys = await AddressableManager.GetKeysByLabel(assetLabel, cancellationToken: token);
             await PreloadInternal<T>(keys, token, progress);
             return new PreloadFromLabelHandle(keys, this);
@@ -178,6 +185,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
             _loadingGate.CancelAll();
         }
 
+        // Callers must pass a deduped enumerable: each unique key triggers exactly one AddRef.
         private async UniTask PreloadInternal<T>(
             IEnumerable<string> keys,
             CancellationToken cancellationToken = default,
@@ -188,16 +196,13 @@ namespace StickerFwk.Infrastructure.AssetManagement
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
             using var __ = PoolScope.List<UniTask>(out var tasks);
-            using var ___ = PoolScope.HashSet<string>(out var keySet);
+            using var ___ = PoolScope.List<string>(out var addedRefs);
+
             foreach (var key in keys)
             {
-                keySet.Add(key);
-            }
-
-            foreach (var key in keySet)
-            {
                 AddRef(key);
-                if (TryGetHandle(key, out var handle)) continue;
+                addedRefs.Add(key);
+                if (TryGetHandle(key, out _)) continue;
 
                 tasks.Add(LoadAsync<T>(key, linkedCts.Token, progress));
             }
@@ -208,7 +213,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
             }
             catch
             {
-                Release(keySet);
+                Release(addedRefs);
                 throw;
             }
         }
@@ -258,7 +263,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
                     if (!newHandle.Succeeded)
                     {
                         Log.Error("AddressableCache", $"Failed to load asset of key '{key}'.");
-                        throw new AssetLoadException(key);
+                        throw AssetLoadException.ForKey(key);
                     }
 
                     if (TryGetHandle(key, out _))

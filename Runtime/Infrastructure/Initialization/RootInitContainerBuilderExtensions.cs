@@ -22,7 +22,7 @@ namespace StickerFwk.Infrastructure.Initialization
         public static void UseRootInit(this IContainerBuilder builder, RootInitSettings settings = null)
         {
             builder.RegisterInstance(settings != null ? settings : RootInitSettings.Default);
-            builder.Register<IRootInitService, RootInitService>(Lifetime.Singleton).AsImplementedInterfaces();
+            builder.Register<RootInitService>(Lifetime.Singleton).AsImplementedInterfaces();
         }
     }
 }

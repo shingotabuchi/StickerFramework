@@ -215,14 +215,13 @@ namespace App.Features.Plinko
 
 ### 4. Window (View) — UI Display
 
-Extends `WindowView<TSelf, TPresenter>`. Thin — holds serialized UI references, displays values provided by the presenter, and exposes input subscriptions. The generic base **automatically forwards every lifecycle hook** (`OnInitialize`, `OnBeforeShow`, `OnShow`, `OnBeforeHide`, `OnHide`, `OnDispose`) to the presenter, so you can't accidentally forget to dispose the presenter and leak it.
+Extends `WindowView<TSelf, TPresenter>`. Thin — holds serialized UI references, displays values provided by the presenter, and exposes input subscriptions. The generic base **automatically forwards every lifecycle hook** (`OnInitialize`, `OnBeforeShow`, `OnShow`, `OnBeforeHide`, `OnHide`, `OnDispose`) to the presenter, so you can't accidentally forget to dispose the presenter and leak it. The presenter is auto-injected by VContainer — no manual `BindPresenter` call required, just register the presenter type in your `LifetimeScope`.
 
 ```csharp
 using System;
 using StickerFwk.Core.UI;
 using UnityEngine;
 using UnityEngine.UI;
-using VContainer;
 
 namespace App.Features.Plinko
 {
@@ -231,12 +230,6 @@ namespace App.Features.Plinko
         [SerializeField] Text _scoreText;
         [SerializeField] Text _ballsText;
         [SerializeField] CoolButton _dropButton;
-
-        [Inject]
-        public void Construct(PlinkoPresenter presenter)
-        {
-            BindPresenter(presenter);
-        }
 
         public IDisposable AddDropListener(Action listener)
         {
@@ -416,8 +409,10 @@ await _sceneTransitionService.TransitionToSceneAsync(
     transitionViewTag: "fade",   // optional: transition style
     beforeLoad: async ct =>
     {
-        // Optional: cleanup before the old scene unloads
-        await _uiService.PopAll(UILayer.UI, ct);
+        // Optional: cleanup before the old scene unloads.
+        // immediate: true skips hide transitions (we're leaving the scene anyway)
+        // so we don't pay 0.3s × stack depth before the load can start.
+        await _uiService.PopAll(UILayer.UI, immediate: true, ct);
     });
 ```
 
@@ -432,7 +427,7 @@ var window = await _uiService.Push<PlinkoWindow>(options: new WindowOptions
 {
     ShowTransition = new SlideTransition { SlideDirection = SlideTransition.Direction.Bottom },
     TransitionDuration = 0.5f,
-    Resolver = _childScope.Container,  // inject from feature scope
+    Inject = _childScope.Container.InjectGameObject,  // inject from feature scope
 });
 
 // Pop it later

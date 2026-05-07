@@ -128,7 +128,7 @@ All services are registered in a **RootLifetimeScope** and injected via construc
 - `ITickable` — per-frame updates (e.g., ScreenService checks resolution changes)
 - `IDisposable` — cleanup
 
-Features can create **child LifetimeScopes** for scoped dependencies. Pass the child resolver via `WindowOptions.Resolver` so pushed windows get feature-specific injection.
+Features can create **child LifetimeScopes** for scoped dependencies. Pass the child resolver's `InjectGameObject` via `WindowOptions.Inject` so pushed windows get feature-specific injection. The `Inject` hook is a DI-agnostic `Action<GameObject>`, keeping `Core.UI` free of any container references.
 
 ### 2. State and Logic Ownership
 

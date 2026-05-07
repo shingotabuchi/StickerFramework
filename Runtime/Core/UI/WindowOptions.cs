@@ -1,4 +1,5 @@
-using VContainer;
+using System;
+using UnityEngine;
 
 namespace StickerFwk.Core.UI
 {
@@ -8,6 +9,11 @@ namespace StickerFwk.Core.UI
         public ITransition ShowTransition { get; set; }
         public ITransition HideTransition { get; set; }
         public float? TransitionDuration { get; set; }
-        public IObjectResolver Resolver { get; set; }
+
+        // DI-agnostic injection hook. If supplied, UIService invokes this on the
+        // instantiated window GameObject instead of using its own resolver. Callers
+        // wire this to whatever DI container is in use (e.g. for VContainer:
+        // `Inject = scope.Container.InjectGameObject`).
+        public Action<GameObject> Inject { get; set; }
     }
 }

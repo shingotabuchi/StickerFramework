@@ -281,7 +281,7 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask<int> PopAll(UILayer layer, CancellationToken ct = default)
+        public async UniTask<int> PopAll(UILayer layer, bool immediate = false, CancellationToken ct = default)
         {
             ThrowIfDisposed();
             using var linkedCts = LinkToken(ct);
@@ -297,7 +297,14 @@ namespace StickerFwk.Infrastructure.UI
                 var popped = 0;
                 while (stack.Count > 0)
                 {
-                    if (await PopLocked(layer, linkedCt))
+                    if (immediate)
+                    {
+                        if (PopImmediateLocked(layer))
+                        {
+                            popped++;
+                        }
+                    }
+                    else if (await PopLocked(layer, linkedCt))
                     {
                         popped++;
                     }
@@ -311,6 +318,14 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
+        // Synchronous queries: main-thread-only, lock-free by design. See the
+        // threading contract on IUIService for the full rules. Summary:
+        //   * No locks are taken; these iterate _stacks directly.
+        //   * They reflect committed stack state — a window is visible to
+        //     IsOpen/GetWindow/GetStackCount the moment it is pushed onto the
+        //     stack (before its show transition completes) and disappears
+        //     the moment it is popped (before its hide transition completes).
+        //   * Calling these from a background thread is not supported.
         public bool IsOpen<T>() where T : WindowView
         {
             foreach (var stack in _stacks.Values)
@@ -348,6 +363,19 @@ namespace StickerFwk.Infrastructure.UI
             await _assetRequester.Preload<GameObject>(new[] { key }, ct);
         }
 
+        public void Unload<T>(string tag = null) where T : WindowView
+        {
+            ThrowIfDisposed();
+            var key = BuildKey<T>(tag);
+            if (!_assetRequester.IsLoaded(key))
+            {
+                return;
+            }
+
+            Log.Info("UIService", $"Unloading window asset '{key}'");
+            _assetRequester.Release(new[] { key });
+        }
+
         // ---------------------------------------------------------------------
         // Lock-free cores. Callers MUST hold the corresponding layer lock.
         // ---------------------------------------------------------------------
@@ -358,6 +386,12 @@ namespace StickerFwk.Infrastructure.UI
             Log.Info("UIService", $"Pushing window with key '{key}'");
             var prefabWindow = windowAsset.PrefabWindow;
 
+            // IsBlocking and TransitionDuration are plain serialized value-type fields, so the
+            // prefab and instance always agree on them — reading from the prefab here lets us
+            // decide whether to spawn the input blocker before the instance exists. The
+            // [SerializeReference] transition graphs (ShowTransition / HideTransition) are read
+            // from the instance below, after instantiation, because object references inside
+            // those graphs are only remapped on the cloned instance.
             var isBlocking = options?.IsBlocking ?? prefabWindow.IsBlocking;
             var transDuration = options?.TransitionDuration ?? prefabWindow.TransitionDuration;
 
@@ -399,9 +433,17 @@ namespace StickerFwk.Infrastructure.UI
                 }
 
                 instance = Object.Instantiate(windowAsset.Prefab, layerTransform);
-                var resolver = options?.Resolver ?? _resolver;
-                Log.Info("UIService", $"Injecting '{key}' using resolver '{resolver.GetType().Name}'.");
-                resolver.InjectGameObject(instance);
+                var inject = options?.Inject;
+                if (inject != null)
+                {
+                    Log.Info("UIService", $"Injecting '{key}' using caller-supplied Inject delegate.");
+                    inject(instance);
+                }
+                else
+                {
+                    Log.Info("UIService", $"Injecting '{key}' using resolver '{_resolver.GetType().Name}'.");
+                    _resolver.InjectGameObject(instance);
+                }
 
                 var windowView = instance.GetComponent<T>();
                 if (windowView == null)
@@ -482,6 +524,37 @@ namespace StickerFwk.Infrastructure.UI
 
             var windowHandle = stack.Pop();
             await _windowLifecycleRunner.Hide(windowHandle.View, windowHandle.HideTransition, windowHandle.TransitionDuration, ct);
+
+            var key = windowHandle.Key;
+            var windowLayer = windowHandle.Layer;
+            windowHandle.Dispose();
+
+            if (stack.Count > 0)
+            {
+                stack.Peek().View.CanvasGroup.interactable = true;
+            }
+            else
+            {
+                _layerManager.SetLayerCanvasEnabled(windowLayer, false);
+            }
+
+            _windowClosedPublisher.Publish(new WindowClosedEvent(key, windowLayer));
+            return true;
+        }
+
+        // Synchronous teardown that skips the hide transition. Used by PopAll(immediate: true)
+        // to wipe a layer in one frame (e.g. on scene change) instead of paying the
+        // accumulated transition cost for every entry in the stack.
+        bool PopImmediateLocked(UILayer layer)
+        {
+            var stack = _stacks[layer];
+            if (stack.Count == 0)
+            {
+                return false;
+            }
+
+            var windowHandle = stack.Pop();
+            _windowLifecycleRunner.HideWithoutTransition(windowHandle.View);
 
             var key = windowHandle.Key;
             var windowLayer = windowHandle.Layer;

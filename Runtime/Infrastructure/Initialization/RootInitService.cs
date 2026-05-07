@@ -3,7 +3,6 @@ using Cysharp.Threading.Tasks;
 using StickerFwk.Core;
 using StickerFwk.Core.Initialization;
 using StickerFwk.Core.MasterData;
-using VContainer;
 using VContainer.Unity;
 
 namespace StickerFwk.Infrastructure.Initialization
@@ -16,12 +15,10 @@ namespace StickerFwk.Infrastructure.Initialization
 
         public UniTask Initialization => _completionSource.Task;
 
-        public RootInitService(IMasterDataRepository masterDataRepository, IObjectResolver resolver)
+        public RootInitService(IMasterDataRepository masterDataRepository, RootInitSettings settings)
         {
             _masterDataRepository = masterDataRepository;
-            _settings = resolver.TryResolve<RootInitSettings>(out var settings) && settings != null
-                ? settings
-                : RootInitSettings.Default;
+            _settings = settings;
         }
 
         public async UniTask StartAsync(CancellationToken cancellation)

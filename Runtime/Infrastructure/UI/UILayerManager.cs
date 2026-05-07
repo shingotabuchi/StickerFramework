@@ -15,6 +15,7 @@ namespace StickerFwk.Infrastructure.UI
         readonly Dictionary<UILayer, Canvas> _layerCanvases = new Dictionary<UILayer, Canvas>();
         IDisposable _cameraSubscription;
         GameObject _root;
+        bool _disposed;
 
         public UILayerManager(
             ICameraService cameraService,
@@ -49,6 +50,13 @@ namespace StickerFwk.Infrastructure.UI
 
         public void Initialize()
         {
+            // Guards against DI ordering quirks where Start runs after Dispose: without this,
+            // we'd create a new [UI Root] that nobody ever cleans up.
+            if (_disposed)
+            {
+                return;
+            }
+
             _root = new GameObject("[UI Root]");
             if (Application.isPlaying)
             {
@@ -160,11 +168,18 @@ namespace StickerFwk.Infrastructure.UI
 
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+
             _cameraSubscription?.Dispose();
             _cameraSubscription = null;
             if (_root != null)
             {
                 UnityEngine.Object.Destroy(_root);
+                _root = null;
             }
             _layerCanvases.Clear();
         }

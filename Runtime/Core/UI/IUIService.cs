@@ -12,8 +12,36 @@ namespace StickerFwk.Core.UI
         UniTask<bool> Pop(WindowView view, CancellationToken ct = default);
         UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
         // Returns the number of windows popped from the layer.
-        UniTask<int> PopAll(UILayer layer, CancellationToken ct = default);
+        // When immediate is true, hide transitions are skipped and all windows are torn down
+        // synchronously in one frame. Use this for "leaving the scene" cases where the
+        // accumulated transition time would otherwise be visible to the user.
+        UniTask<int> PopAll(UILayer layer, bool immediate = false, CancellationToken ct = default);
         UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView;
+        // Releases the asset reference taken by a prior Preload<T>(tag). Safe to call when the
+        // asset is not currently loaded (no-op). Mirrors Preload<T> so consumers do not need to
+        // reach into IAssetRequester with a hand-built key to drop a preload that was never
+        // pushed.
+        void Unload<T>(string tag = null) where T : WindowView;
+
+        // Threading contract for the synchronous query methods below
+        // (IsOpen<T>, GetWindow<T>, GetStackCount):
+        //
+        //   * Main-thread-only. They take no locks and iterate the underlying
+        //     stacks directly. Calling them from a background thread is not
+        //     supported and may observe torn state.
+        //
+        //   * They return a snapshot of state taken between awaits. If a
+        //     Push/Pop/Replace is in flight on the same logical operation
+        //     (e.g. paused awaiting a show/hide transition), the window is
+        //     considered "open" once it has been placed on the stack and
+        //     "closed" once it has been removed from the stack — even if its
+        //     transition has not yet completed. Callers that need
+        //     transition-complete semantics must await the originating
+        //     Push/Pop/Replace task.
+        //
+        //   * Mutating methods (Push/Pop/Replace/PopAll) serialize via
+        //     per-layer locks; these queries intentionally do not, so they
+        //     remain cheap and usable from synchronous contexts (e.g. Update).
         bool IsOpen<T>() where T : WindowView;
         T GetWindow<T>() where T : WindowView;
         int GetStackCount(UILayer layer);

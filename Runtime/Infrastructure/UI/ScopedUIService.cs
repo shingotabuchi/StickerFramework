@@ -98,9 +98,9 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
-        public async UniTask<int> PopAll(UILayer layer, CancellationToken ct = default)
+        public async UniTask<int> PopAll(UILayer layer, bool immediate = false, CancellationToken ct = default)
         {
-            var popped = await _inner.PopAll(layer, ct);
+            var popped = await _inner.PopAll(layer, immediate, ct);
             for (var i = _tracked.Count - 1; i >= 0; i--)
             {
                 var view = _tracked[i];
@@ -115,6 +115,12 @@ namespace StickerFwk.Infrastructure.UI
         public UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView
         {
             return _inner.Preload<T>(tag, ct);
+        }
+
+        public void Unload<T>(string tag = null) where T : WindowView
+        {
+            ThrowIfDisposed();
+            _inner.Unload<T>(tag);
         }
 
         public bool IsOpen<T>() where T : WindowView
@@ -151,9 +157,18 @@ namespace StickerFwk.Infrastructure.UI
 
                 // Pop is fire-and-forget at scope teardown. Surface failures via the
                 // framework Log so they aren't silently swallowed if the inner service
-                // throws after the scope has already begun tearing down.
+                // throws after the scope has already begun tearing down. Cancellation is
+                // expected when the inner service is being disposed alongside this scope
+                // (its own CTS races our Pop calls), so swallow OperationCanceledException
+                // to avoid spamming the error channel on every shutdown.
                 _inner.Pop(view).Forget(static ex =>
-                    Log.Error("ScopedUIService", $"Pop during scope dispose failed: {ex}"));
+                {
+                    if (ex is OperationCanceledException)
+                    {
+                        return;
+                    }
+                    Log.Error("ScopedUIService", $"Pop during scope dispose failed: {ex}");
+                });
             }
 
             _tracked.Clear();

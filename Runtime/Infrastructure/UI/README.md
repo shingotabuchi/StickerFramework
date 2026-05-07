@@ -24,7 +24,7 @@ A general-purpose UI framework for managing windows (menus, HUD, popups, dialogs
 - **Push**: Open a new window on top of the stack.
 - **Pop**: Close the top window of a layer (`Pop(UILayer)`), the topmost window of a given type (`Pop<T>()`), or a specific window instance regardless of position (`Pop(WindowView)`).
 - **Replace**: Close the current top window of the new window's layer and push the new one. The target layer is taken from the prefab, so the pop and the push are guaranteed to happen on the same layer.
-- **PopAll**: Clear all windows from a layer.
+- **PopAll**: Clear all windows from a layer. Pass `immediate: true` to skip hide transitions and tear the stack down in one frame (e.g. on scene change), avoiding the accumulated transition cost (5 windows × 0.3s = 1.5s otherwise).
 - **IsOpen\<T\>** / **GetWindow\<T\>**: Query whether a specific window type is open.
 - **GetStackCount**: Check the stack size for a given layer.
 - Each layer maintains its own independent stack.
@@ -90,14 +90,15 @@ Need a Canvas authored in the scene (boot splash, version label, debug overlay)?
 - The system handles load failures gracefully (logs error, does not break the stack).
 - Asset handles are released when windows are disposed.
 
-## R7: Dependency Injection (Per-Push Resolver)
+## R7: Dependency Injection (Per-Push Inject Delegate)
 
 - `UIService` does **not** create a child `LifetimeScope` per window. There is no per-window scope to dispose.
-- After instantiating a window prefab, `UIService.PushInternal` calls `resolver.InjectGameObject(instance)` to populate `[Inject]` members on the window's MonoBehaviour and its children.
-- The resolver used is, in order of preference:
-  1. `WindowOptions.Resolver` if the caller passed one (typically a feature/scene child scope's `IObjectResolver`),
+- After instantiating a window prefab, `UIService.PushInternal` injects dependencies into the window's MonoBehaviour and its children.
+- The injection mechanism used is, in order of preference:
+  1. `WindowOptions.Inject` — a DI-agnostic `Action<GameObject>` delegate supplied by the caller (typically `someScope.Container.InjectGameObject` for VContainer, or any equivalent for another container),
   2. otherwise the `IObjectResolver` that was injected into `UIService` itself (the scope where `UIService` was registered — usually the root scope).
-- Feature-specific dependencies are made available to a window by **building a child `LifetimeScope` yourself** and passing its `IObjectResolver` via `WindowOptions.Resolver` on `Push` / `Replace`. The child scope's lifetime, including any services it owns, is the caller's responsibility.
+- Feature-specific dependencies are made available to a window by **building a child `LifetimeScope` yourself** and passing its inject hook via `WindowOptions.Inject` on `Push` / `Replace`. The child scope's lifetime, including any services it owns, is the caller's responsibility.
+- The `Inject` delegate keeps `WindowOptions` (in `Core.UI`) free of any DI-container references; only `UIService` (Infrastructure) knows about VContainer.
 - For automatic teardown of windows pushed from a scope, register a `ScopedUIService` (see **R12**). It wraps `IUIService` and pops tracked windows when the scope disposes — but it still does not create per-window scopes.
 
 ## R8: MessagePipe Events
@@ -178,7 +179,7 @@ Windows pushed via `IUIService` from inside a child `LifetimeScope` should be po
 - `ScopedUIService` is a thin wrapper that takes the concrete root `UIService` and forwards every call to it.
 - It tracks every `WindowView` returned by its own `Push` / `Replace` calls.
 - On `Dispose` (scope teardown), it iterates tracked views in reverse push order and calls `IUIService.Pop(WindowView)` for each one whose GameObject hasn't already been destroyed (Unity-null check).
-- All other calls (`Pop`, `Pop<T>`, `PopAll`, `Preload`, `IsOpen`, `GetWindow`, `GetStackCount`) pass through untouched. Manual gameplay-driven pops still work exactly as before; the wrapper is purely a teardown safety net.
+- All other calls (`Pop`, `Pop<T>`, `PopAll`, `Preload`, `Unload`, `IsOpen`, `GetWindow`, `GetStackCount`) pass through untouched. Manual gameplay-driven pops still work exactly as before; the wrapper is purely a teardown safety net.
 
 ### Wiring
 

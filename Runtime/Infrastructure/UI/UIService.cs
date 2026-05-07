@@ -373,7 +373,7 @@ namespace StickerFwk.Infrastructure.UI
             }
 
             Log.Info("UIService", $"Unloading window asset '{key}'");
-            _assetRequester.Release(new[] { key });
+            _assetRequester.Release(key);
         }
 
         // ---------------------------------------------------------------------
@@ -476,12 +476,20 @@ namespace StickerFwk.Infrastructure.UI
             {
                 if (windowHandle != null)
                 {
-                    if (stack.Count > 0 && ReferenceEquals(stack.Peek(), windowHandle))
+                    // If Dispose ran while we were awaiting (e.g. show transition observed
+                    // the cancellation), it has already drained the stack and disposed this
+                    // handle along with the layer manager. Touching either again would
+                    // double-dispose the asset handle and KeyNotFoundException on
+                    // _layerCanvases. Just unwind.
+                    if (!_disposed)
                     {
-                        stack.Pop();
-                    }
+                        if (stack.Count > 0 && ReferenceEquals(stack.Peek(), windowHandle))
+                        {
+                            stack.Pop();
+                        }
 
-                    windowHandle.Dispose();
+                        windowHandle.Dispose();
+                    }
                 }
                 else
                 {
@@ -499,14 +507,17 @@ namespace StickerFwk.Infrastructure.UI
                     windowAsset.Dispose();
                 }
 
-                if (disabledPreviousTop && stack.Count > 0)
+                if (!_disposed)
                 {
-                    stack.Peek().View.CanvasGroup.interactable = true;
-                }
+                    if (disabledPreviousTop && stack.Count > 0)
+                    {
+                        stack.Peek().View.CanvasGroup.interactable = true;
+                    }
 
-                if (enabledLayer && stack.Count == 0)
-                {
-                    _layerManager.SetLayerCanvasEnabled(layer, false);
+                    if (enabledLayer && stack.Count == 0)
+                    {
+                        _layerManager.SetLayerCanvasEnabled(layer, false);
+                    }
                 }
 
                 throw;

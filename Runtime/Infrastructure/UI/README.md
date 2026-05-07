@@ -99,6 +99,7 @@ Need a Canvas authored in the scene (boot splash, version label, debug overlay)?
   2. otherwise the `IObjectResolver` that was injected into `UIService` itself (the scope where `UIService` was registered — usually the root scope).
 - Feature-specific dependencies are made available to a window by **building a child `LifetimeScope` yourself** and passing its inject hook via `WindowOptions.Inject` on `Push` / `Replace`. The child scope's lifetime, including any services it owns, is the caller's responsibility.
 - The `Inject` delegate keeps `WindowOptions` (in `Core.UI`) free of any DI-container references; only `UIService` (Infrastructure) knows about VContainer.
+- Note: this DI-agnostic injection path applies to `WindowOptions` and the non-generic `WindowView` base class. The recommended generic base class `WindowView<TSelf, TPresenter>` is VContainer-specific — it ships an `[Inject]` method to auto-resolve the presenter. Non-VContainer consumers should derive from `WindowView` directly and bind their own presenter (or call `BindPresenter` manually from a test/non-DI setup). The `Core.UI` assembly already references VContainer, so this is a documentation clarification, not a new dependency.
 - For automatic teardown of windows pushed from a scope, register a `ScopedUIService` (see **R12**). It wraps `IUIService` and pops tracked windows when the scope disposes — but it still does not create per-window scopes.
 
 ## R8: MessagePipe Events

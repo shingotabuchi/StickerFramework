@@ -41,6 +41,8 @@ namespace StickerFwk.Core.AssetManagement
             IProgress<float> progress = null
         ) where T : Object;
 
+        void Release(string key);
+
         void Release(IEnumerable<string> keys);
 
         UniTask ReleaseFromLabel(string assetLabel, CancellationToken cancellationToken = default);

@@ -14,9 +14,10 @@ namespace StickerFwk.Core
     /// <para>
     /// <b>Thread-safety:</b> All access to the in-flight dictionary is guarded by an internal
     /// lock, so the gate is safe to call from any thread. Continuations of the awaited task
-    /// resume on whatever <see cref="System.Threading.SynchronizationContext"/> the caller was
-    /// on — typical Unity + UniTask usage resumes on the main thread, but if you await operations
-    /// that resume on a background thread, that's fine: the next gate call will lock as needed.
+    /// resume according to UniTask's PlayerLoop-based scheduler (not the captured
+    /// <see cref="System.Threading.SynchronizationContext"/>) — typical Unity + UniTask usage
+    /// resumes on the main thread, but if you await operations that resume on a background
+    /// thread, that's fine: the next gate call will lock as needed.
     /// </para>
     /// </remarks>
     public sealed class KeyedOperationGate<TKey>

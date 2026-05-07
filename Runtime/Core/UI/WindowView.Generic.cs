@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core.Presentation;
@@ -35,8 +36,19 @@ namespace StickerFwk.Core.UI
         /// <see cref="BindPresenter"/> call from a test) and the resolved instance matches, the
         /// call is a no-op.
         /// </summary>
+        /// <remarks>
+        /// This method must be public so VContainer's reflection/source-generated injector can
+        /// invoke it, but it is not intended to be called by application code. Use
+        /// <see cref="BindPresenter"/> in tests / non-DI scenarios instead.
+        /// <para>
+        /// VContainer fires this once per scope build per window instance; re-injecting the
+        /// same window from a second scope build is unsupported and will throw via
+        /// <see cref="BindPresenter"/>'s duplicate-bind guard.
+        /// </para>
+        /// </remarks>
         [Inject]
-        public void InjectPresenter(TPresenter presenter)
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public void __VContainerInjectPresenter(TPresenter presenter)
         {
             BindPresenter(presenter);
         }

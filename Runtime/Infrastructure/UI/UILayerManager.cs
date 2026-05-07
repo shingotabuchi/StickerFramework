@@ -57,6 +57,11 @@ namespace StickerFwk.Infrastructure.UI
                 return;
             }
 
+            if (_root != null)
+            {
+                return;
+            }
+
             _root = new GameObject("[UI Root]");
             if (Application.isPlaying)
             {

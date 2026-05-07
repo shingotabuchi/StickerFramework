@@ -28,20 +28,20 @@ namespace StickerFwk.Core.AssetManagement
         {
         }
 
-        public AssetLoadException(string key, string message)
-            : base(message)
-        {
-            Key = key;
-        }
-
-        public AssetLoadException(string key, string message, Exception inner)
+        private AssetLoadException(string key, string message, Exception inner)
             : base(message, inner)
         {
             Key = key;
         }
 
         public static AssetLoadException ForKey(string key)
-            => new AssetLoadException(key, $"Failed to load asset of key '{key}'.");
+            => new AssetLoadException(key, $"Failed to load asset of key '{key}'.", null);
+
+        public static AssetLoadException ForKey(string key, string message)
+            => new AssetLoadException(key, message, null);
+
+        public static AssetLoadException ForKey(string key, string message, Exception inner)
+            => new AssetLoadException(key, message, inner);
 
         protected AssetLoadException(SerializationInfo info, StreamingContext context)
             : base(info, context)

@@ -75,10 +75,20 @@ namespace StickerFwk.Infrastructure.AssetManagement
     public class AddressableCache : IDisposable, IAssetRequester
     {
         private readonly KeyedOperationGate<string> _loadingGate = new();
+        private readonly IAddressableLoader _loader;
         private CancellationTokenSource _disposeCts = new();
         private Dictionary<string, IAddressableHandle> _handles = new();
         private bool _isDisposed;
         private Dictionary<string, int> _refCounts = new();
+
+        public AddressableCache() : this(DefaultAddressableLoader.Instance)
+        {
+        }
+
+        internal AddressableCache(IAddressableLoader loader)
+        {
+            _loader = loader ?? DefaultAddressableLoader.Instance;
+        }
 
         public async UniTask<IAssetHandle<T>> RequestAsset<T>(
             string key,
@@ -258,7 +268,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
             {
                 try
                 {
-                    var newHandle = await AddressableManager.LoadAsync<T>(key, progress, linkedCts.Token);
+                    var newHandle = await _loader.LoadAsync<T>(key, progress, linkedCts.Token);
 
                     if (!newHandle.Succeeded)
                     {
@@ -379,6 +389,29 @@ namespace StickerFwk.Infrastructure.AssetManagement
             var actualType = asset != null ? asset.GetType().Name : "null";
             throw new InvalidOperationException(
                 $"Addressable asset '{key}' was requested as {typeof(T).Name}, but the cached asset is {actualType}.");
+        }
+    }
+
+    internal interface IAddressableLoader
+    {
+        UniTask<IAddressableHandle> LoadAsync<T>(
+            string key,
+            IProgress<float> progress,
+            CancellationToken cancellationToken
+        ) where T : Object;
+    }
+
+    internal sealed class DefaultAddressableLoader : IAddressableLoader
+    {
+        public static readonly DefaultAddressableLoader Instance = new();
+
+        public async UniTask<IAddressableHandle> LoadAsync<T>(
+            string key,
+            IProgress<float> progress,
+            CancellationToken cancellationToken
+        ) where T : Object
+        {
+            return await AddressableManager.LoadAsync<T>(key, progress, cancellationToken);
         }
     }
 }

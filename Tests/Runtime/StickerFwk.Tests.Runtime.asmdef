@@ -5,7 +5,9 @@
         "StickerFwk.Core",
         "StickerFwk.Infrastructure",
         "StickerFwk.Infrastructure.UI",
-        "UniTask"
+        "UniTask",
+        "VContainer",
+        "MessagePipe"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

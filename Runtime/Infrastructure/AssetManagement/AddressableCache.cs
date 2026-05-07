@@ -223,7 +223,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
 
-            Log.Info($"Loading asset with key '{key}'...");
+            Log.Info("AddressableCache", $"Loading asset with key '{key}'...");
 
             if (TryGetHandle(key, out var handle)) return GetTypedAsset<T>(key, handle);
 
@@ -233,7 +233,7 @@ namespace StickerFwk.Infrastructure.AssetManagement
             }
             catch (Exception ex)
             {
-                Log.Error($"Loading task for key '{key}' failed: {ex}");
+                Log.Error("AddressableCache", $"Loading task for key '{key}' failed: {ex}");
                 throw;
             }
 
@@ -257,31 +257,31 @@ namespace StickerFwk.Infrastructure.AssetManagement
 
                     if (!newHandle.Succeeded)
                     {
-                        Log.Error($"Failed to load asset of key '{key}'.");
-                        throw new Exception($"Failed to load asset of key '{key}'.");
+                        Log.Error("AddressableCache", $"Failed to load asset of key '{key}'.");
+                        throw new AssetLoadException(key);
                     }
 
                     if (TryGetHandle(key, out _))
                     {
-                        Log.Warning($"Key '{key}' already exists in the cache. Releasing the new handle.");
+                        Log.Warning("AddressableCache", $"Key '{key}' already exists in the cache. Releasing the new handle.");
                         newHandle.Release();
                     }
                     else
                     {
-                        Log.Info($"Successfully loaded asset with key '{key}'. Caching handle.");
+                        Log.Info("AddressableCache", $"Successfully loaded asset with key '{key}'. Caching handle.");
                         _handles[key] = newHandle;
                     }
                 }
                 catch (OperationCanceledException)
                 {
                     TryReleaseHandle(key);
-                    Log.Info($"Loading asset with key '{key}' was canceled.");
+                    Log.Info("AddressableCache", $"Loading asset with key '{key}' was canceled.");
                     throw;
                 }
                 catch (Exception ex)
                 {
                     TryReleaseHandle(key);
-                    Log.Error($"Failed to load asset of key '{key}': {ex}");
+                    Log.Error("AddressableCache", $"Failed to load asset of key '{key}': {ex}");
                     throw;
                 }
             }
@@ -314,14 +314,14 @@ namespace StickerFwk.Infrastructure.AssetManagement
                 return true;
             }
 
-            Log.Warning($"No handle found for key '{key}'. Cannot release.");
+            Log.Warning("AddressableCache", $"No handle found for key '{key}'. Cannot release.");
             return false;
         }
 
         public void Release(string key)
         {
-            Log.Info($"Releasing asset with key '{key}'...");
-            if (!TryReleaseRef(key)) Log.Warning($"No handle found for key '{key}'.");
+            Log.Info("AddressableCache", $"Releasing asset with key '{key}'...");
+            if (!TryReleaseRef(key)) Log.Warning("AddressableCache", $"No handle found for key '{key}'.");
         }
 
         public void ReleaseAll()

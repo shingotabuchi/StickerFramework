@@ -167,7 +167,7 @@ All I/O operations return `UniTask`. Cancellation tokens propagate through all c
 - Asset handles are ref-counted — dispose when done.
 - Input locks return `IDisposable` — use `using var _ = lockService.Lock();`.
 - Blur requests return `IDisposable`.
-- `WindowView.AddDisposable()` tracks subscriptions, cleaned on hide.
+- `WindowView.AddDisposable()` tracks subscriptions; the underlying `CompositeDisposable` is disposed in `OnDispose` (when the window is destroyed at pop time), not on hide. Subscriptions therefore live for the full window lifetime.
 
 ### 6. Thin Views
 

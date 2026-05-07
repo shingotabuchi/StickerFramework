@@ -54,6 +54,8 @@ Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Co
 - Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
 - `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that swap camera profiles).
 
+> **Why only three layers?** The framework intentionally does **not** split HUD / Window / Popup / Modal across separate `UILayer` values. Within `UI`, ordering between simultaneously open windows is determined by push order (later pushes draw above earlier ones) and child-sibling order inside a prefab; modality is controlled per-window via `WindowView.IsBlocking`. Add a new enum entry only when you need a dedicated camera/canvas pair (different post-processing, guaranteed top/bottom rendering, etc.) — not just because two windows have different gameplay roles.
+
 Need a Canvas authored in the scene (boot splash, version label, debug overlay)? Use `CanvasCameraBinder` instead — see **R11**. The `UILayer` enum is reserved for windows pushed through `IUIService`.
 
 ## R4: Modal / Input Blocking

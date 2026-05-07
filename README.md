@@ -366,3 +366,17 @@ Assets/Scripts/Runtime/Features/<FeatureName>/Presentation/
 
 These are declared in `package.json` so Unity Package Manager resolves them when
 importing `com.stickerfwk.core`.
+
+### Pinned-dependency maintenance
+
+MessagePipe, R3, UniTask, and VContainer are pinned to **git commit SHAs** rather than semver tags so the resolved package is byte-identical across machines. The trade-off is that semver isn't visible to UPM. To keep the SHAs greppable, `package.json` carries a `_pinnedDependencies` block alongside `dependencies` that lists each pinned commit and a verification link.
+
+To bump one of the pinned deps:
+
+1. Pick a new commit (typically a release tag) on the upstream repo and copy its full SHA.
+2. Update both:
+   - the `#<sha>` fragment in `dependencies` (the value Unity actually reads), and
+   - the matching label in `_pinnedDependencies` (informational, for humans).
+3. In Unity, force re-resolve (`Window → Package Manager → ⋯ → Reset packages-lock.json`) and verify the project still compiles + tests pass.
+
+`_pinnedDependencies` is a custom field; UPM ignores unknown top-level keys, so it's safe to ship.

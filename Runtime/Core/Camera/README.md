@@ -92,13 +92,13 @@ public class MyLifetimeScope : LifetimeScope
 
 ## Tests
 
-`CameraStackResolver` (pure C#) is the testable core. See `Assets/Tests/EditMode/Camera/CameraStackResolverTests.cs` for:
+`CameraStackResolver` (pure C#) is the testable core. See `Tests/Runtime/CameraStackResolverTests.cs` in this package for:
 - Single slot becomes the Base
 - Lowest-depth slot wins the Base role; all others become overlays sorted by depth
 - Empty input → no Base
 - Multi-profile composition (Root → Root+Gameplay handoff)
 
-`CameraProfileService` integration tests (`CameraProfileServiceTests.cs`) cover refcount semantics:
+`CameraProfileService` integration tests (which need PlayMode) live in the consuming project under `Assets/Tests/PlayMode/Camera/CameraProfileServiceTests.cs` and cover refcount semantics:
 - Push registers cameras + activates the profile
 - Push the same profile twice → cameras created once
 - Pop one of two profiles → keeps the survivor's cameras

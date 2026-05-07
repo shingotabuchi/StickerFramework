@@ -149,7 +149,11 @@ namespace StickerFwk.Infrastructure.UI
                     continue;
                 }
 
-                _inner.Pop(view).Forget();
+                // Pop is fire-and-forget at scope teardown. Surface failures via the
+                // framework Log so they aren't silently swallowed if the inner service
+                // throws after the scope has already begun tearing down.
+                _inner.Pop(view).Forget(static ex =>
+                    Log.Error("ScopedUIService", $"Pop during scope dispose failed: {ex}"));
             }
 
             _tracked.Clear();

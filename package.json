@@ -4,6 +4,14 @@
   "displayName": "Sticker Framework",
   "description": "Reusable Unity framework with DI, UI, camera, input, rendering, and asset management infrastructure.",
   "unity": "6000.0",
+  "_pinnedDependencies": {
+    "_comment": "Informational only. The git-SHA-pinned packages below were chosen at the time of writing and have no semver visibility in 'dependencies'. To check or update one, run: git ls-remote --tags <upstream-url> | grep <sha-prefix> — if the SHA matches a tag, that's its release; otherwise it's a commit between tags. Bumping a dependency = update the SHA in 'dependencies' and record the new tag/SHA pair below.",
+    "com.cysharp.messagepipe":            "pinned at 2b49ed40436b89e023df4cc0d39db67de2c78735 (verify: https://github.com/Cysharp/MessagePipe/commits/main)",
+    "com.cysharp.messagepipe.vcontainer": "pinned at 2b49ed40436b89e023df4cc0d39db67de2c78735 (same repo as messagepipe)",
+    "com.cysharp.r3":                     "pinned at dc69078430149db8cd93069f502cefe148745b4b (verify: https://github.com/Cysharp/R3/commits/main)",
+    "com.cysharp.unitask":                "pinned at a9e27c03d411d2fca01cc7410c24c97cd77cb539 (verify: https://github.com/Cysharp/UniTask/commits/master)",
+    "jp.hadashikick.vcontainer":          "pinned at 177dbda557fd652ce7f5d1647a3621653e094373 (verify: https://github.com/hadashiA/VContainer/commits/master)"
+  },
   "dependencies": {
     "com.cysharp.messagepipe": "https://github.com/Cysharp/MessagePipe.git?path=src/MessagePipe.Unity/Assets/Plugins/MessagePipe#2b49ed40436b89e023df4cc0d39db67de2c78735",
     "com.cysharp.messagepipe.vcontainer": "https://github.com/Cysharp/MessagePipe.git?path=src/MessagePipe.Unity/Assets/Plugins/MessagePipe.VContainer#2b49ed40436b89e023df4cc0d39db67de2c78735",

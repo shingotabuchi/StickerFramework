@@ -66,6 +66,13 @@ namespace StickerFwk.Core.UI
             OnDisposeInternal();
         }
 
+        /// <summary>
+        /// Tracks an <see cref="IDisposable"/> for the lifetime of this window. Items added here
+        /// are disposed in <see cref="OnDispose"/> — i.e. when the window is popped and destroyed.
+        /// They are NOT disposed in <see cref="OnHide"/>, so a subscription registered here will
+        /// keep firing if the window is hidden and later shown again. For hide-scoped lifetimes,
+        /// manage the disposable yourself in <see cref="OnHideInternal"/>.
+        /// </summary>
         protected void AddDisposable(IDisposable disposable)
         {
             if (disposable == null)

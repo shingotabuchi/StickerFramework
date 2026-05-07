@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using R3;
+using StickerFwk.Core.InspectorTools;
 using UnityEngine;
 
 namespace StickerFwk.Core.UI
@@ -15,8 +16,8 @@ namespace StickerFwk.Core.UI
         [SerializeField] float _transitionDuration = 0.3f;
 
         [Header("Transitions")]
-        [SerializeReference] ITransition _showTransition = new FadeTransition();
-        [SerializeReference] ITransition _hideTransition = new FadeTransition();
+        [SerializeReference, SubclassSelector] ITransition _showTransition = new FadeTransition();
+        [SerializeReference, SubclassSelector] ITransition _hideTransition = new FadeTransition();
 
         CompositeDisposable _disposables = new CompositeDisposable();
 

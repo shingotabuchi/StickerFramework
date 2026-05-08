@@ -157,13 +157,14 @@ namespace StickerFwk.Infrastructure.UI
 
                 // Pop is fire-and-forget at scope teardown. Surface failures via the
                 // framework Log so they aren't silently swallowed if the inner service
-                // throws after the scope has already begun tearing down. Cancellation is
-                // expected when the inner service is being disposed alongside this scope
-                // (its own CTS races our Pop calls), so swallow OperationCanceledException
-                // to avoid spamming the error channel on every shutdown.
+                // throws after the scope has already begun tearing down. Cancellation
+                // and ObjectDisposed are expected when the inner service is being
+                // disposed alongside this scope (its own CTS races our Pop calls, or
+                // the root scope has already torn it down), so swallow those to avoid
+                // spamming the error channel on every shutdown.
                 _inner.Pop(view).Forget(static ex =>
                 {
-                    if (ex is OperationCanceledException)
+                    if (ex is OperationCanceledException || ex is ObjectDisposedException)
                     {
                         return;
                     }

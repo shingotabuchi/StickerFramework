@@ -196,8 +196,7 @@ namespace StickerFwk.Core.Debug
 
         private void DrawToggleButton(float scale)
         {
-            var screenW = Screen.width / scale;
-            var screenH = Screen.height / scale;
+            var safeArea = GetScaledSafeArea(scale);
             var width = _settings.ButtonWidth;
             var height = _settings.ButtonHeight;
             var margin = _settings.ButtonMargin;
@@ -206,22 +205,25 @@ namespace StickerFwk.Core.Debug
             switch (_settings.ButtonCorner)
             {
                 case DebugMenuButtonCorner.TopLeft:
-                    x = margin;
-                    y = margin;
+                    x = safeArea.xMin + margin;
+                    y = safeArea.yMin + margin;
                     break;
                 case DebugMenuButtonCorner.TopRight:
-                    x = screenW - width - margin;
-                    y = margin;
+                    x = safeArea.xMax - width - margin;
+                    y = safeArea.yMin + margin;
                     break;
                 case DebugMenuButtonCorner.BottomLeft:
-                    x = margin;
-                    y = screenH - height - margin;
+                    x = safeArea.xMin + margin;
+                    y = safeArea.yMax - height - margin;
                     break;
                 default: // BottomRight
-                    x = screenW - width - margin;
-                    y = screenH - height - margin;
+                    x = safeArea.xMax - width - margin;
+                    y = safeArea.yMax - height - margin;
                     break;
             }
+
+            x = Mathf.Clamp(x, safeArea.xMin, Mathf.Max(safeArea.xMin, safeArea.xMax - width));
+            y = Mathf.Clamp(y, safeArea.yMin, Mathf.Max(safeArea.yMin, safeArea.yMax - height));
 
             if (GUI.Button(new Rect(x, y, width, height), _settings.ButtonText, _styles.ToggleButton))
             {
@@ -231,18 +233,20 @@ namespace StickerFwk.Core.Debug
 
         private void DrawPanel(float scale)
         {
-            var screenH = Screen.height / scale;
+            var safeArea = GetScaledSafeArea(scale);
             var margin = _settings.PanelMargin;
+            var maxWidth = Mathf.Max(0f, safeArea.width - margin * 2f);
+            var width = Mathf.Min(_settings.PanelWidth, maxWidth);
             float height;
             if (_settings.PanelFillScreenHeight)
             {
-                height = Mathf.Min(screenH - margin * 2f, _settings.PanelMaxHeight);
+                height = Mathf.Min(Mathf.Max(0f, safeArea.height - margin * 2f), _settings.PanelMaxHeight);
             }
             else
             {
-                height = _settings.PanelMaxHeight;
+                height = Mathf.Min(_settings.PanelMaxHeight, Mathf.Max(0f, safeArea.height - margin * 2f));
             }
-            var rect = new Rect(margin, margin, _settings.PanelWidth, height);
+            var rect = new Rect(safeArea.xMin + margin, safeArea.yMin + margin, width, height);
             GUILayout.BeginArea(rect, _styles.Window);
 
             var current = _stack.Count > 0 ? _stack.Peek() : _rootPage;
@@ -277,6 +281,21 @@ namespace StickerFwk.Core.Debug
             GUILayout.EndScrollView();
 
             GUILayout.EndArea();
+        }
+
+        private static Rect GetScaledSafeArea(float scale)
+        {
+            var safeArea = Screen.safeArea;
+            if (safeArea.width <= 0f || safeArea.height <= 0f)
+            {
+                safeArea = new Rect(0f, 0f, Screen.width, Screen.height);
+            }
+
+            var safeX = safeArea.x / scale;
+            var safeY = (Screen.height - safeArea.yMax) / scale;
+            var safeW = safeArea.width / scale;
+            var safeH = safeArea.height / scale;
+            return new Rect(safeX, safeY, safeW, safeH);
         }
 
         // Widget lists are built once per page on first display and cached for the lifetime of the menu.

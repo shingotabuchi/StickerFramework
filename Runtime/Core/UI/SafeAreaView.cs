@@ -10,7 +10,7 @@ namespace StickerFwk.Core.UI
     public sealed class SafeAreaView : MonoBehaviour
     {
         private RectTransform _rectTransform;
-        [Inject] private readonly ISubscriber<ScreenChangedEvent> _subscriber;
+        private ISubscriber<ScreenChangedEvent> _subscriber;
         private IDisposable _subscription;
 
         private void Awake()
@@ -20,18 +20,41 @@ namespace StickerFwk.Core.UI
 
         private void OnEnable()
         {
-            if(_subscriber == null)
+            if (_subscriber == null)
             {
                 return;
             }
-            
-            _subscription = _subscriber.Subscribe(_ => Apply());
-            Apply();
+
+            SubscribeAndApply();
         }
 
         private void OnDisable()
         {
             _subscription?.Dispose();
+            _subscription = null;
+        }
+
+        [Inject]
+        public void Construct(ISubscriber<ScreenChangedEvent> subscriber)
+        {
+            _subscriber = subscriber;
+
+            if (isActiveAndEnabled)
+            {
+                SubscribeAndApply();
+            }
+        }
+
+        private void SubscribeAndApply()
+        {
+            if (_rectTransform == null)
+            {
+                _rectTransform = GetComponent<RectTransform>();
+            }
+
+            _subscription?.Dispose();
+            _subscription = _subscriber.Subscribe(_ => Apply());
+            Apply();
         }
 
         private void Apply()

@@ -37,6 +37,7 @@ namespace StickerFwk.Core.Initialization
                     _default = CreateInstance<RootInitSettings>();
                     _default.hideFlags = HideFlags.HideAndDontSave;
                     _default.name = "RootInitSettings (Default)";
+                    _default._targetFrameRate = 60;
                 }
                 return _default;
             }

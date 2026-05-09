@@ -2,7 +2,8 @@
     "name": "StickerFwk.Core.Editor",
     "rootNamespace": "StickerFwk.Core.Editor",
     "references": [
-        "StickerFwk.Core"
+        "StickerFwk.Core",
+        "Unity.Addressables.Editor"
     ],
     "includePlatforms": [
         "Editor"

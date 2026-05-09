@@ -317,6 +317,143 @@ namespace App.Features.Plinko
 
 ---
 
+## Scene-bound start views (Title pattern)
+
+> **When to use:** the small number of views that are placed directly in a scene's
+> hierarchy and exist before a UI stack is meaningful — chiefly **start scenes
+> like Title**, where the view is the first thing visible after the scene loads
+> and there is no transition-driven push semantics.
+>
+> **For everything else, prefer `WindowView` + `IUIService.Push<T>()`.** That gets
+> you show/hide transitions, layer routing, blocking semantics, and auto-pop on
+> scope dispose — none of which a scene-bound view provides.
+
+The framework deliberately does **not** ship a parallel `SceneBoundView` hierarchy
+for this case. Scene-bound views are rare and their lifecycle is naturally
+expressed in MonoBehaviour callbacks, so the pattern is:
+
+- The view is a plain `MonoBehaviour` (not a `WindowView`).
+- The presenter extends the existing `Presenter<TView>` base from
+  `StickerFwk.Core.Presentation` (which already provides `Bind` / `Unbind` /
+  `Dispose` and the `View` accessor).
+- The view receives the presenter through a VContainer `[Inject]` method, calls
+  `Bind`, then drives `InitializeAsync` from `Start` and `Dispose` from
+  `OnDestroy`.
+- The scene's `LifetimeScope` registers both the view (via
+  `RegisterComponentInHierarchy`) and the presenter.
+
+That's the entire pattern. Roughly twenty lines of glue per view, no new
+framework types.
+
+### Example: Title
+
+```csharp
+// TitleView.cs — scene-resident MonoBehaviour
+using System;
+using Cysharp.Threading.Tasks;
+using TMPro;
+using UnityEngine;
+using VContainer;
+
+public class TitleView : MonoBehaviour
+{
+    [SerializeField] CoolButton _startButton;
+    [SerializeField] TMP_Text _reviveCountText;
+
+    TitlePresenter _presenter;
+
+    public Action OnStartButtonPressed;
+
+    [Inject]
+    public void Construct(TitlePresenter presenter)
+    {
+        _presenter = presenter;
+        _presenter.Bind(this);
+    }
+
+    void Awake()
+    {
+        _startButton.AddClickListener(() => OnStartButtonPressed?.Invoke());
+    }
+
+    async void Start()
+    {
+        try
+        {
+            await _presenter.InitializeAsync(this.GetCancellationTokenOnDestroy());
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    void OnDestroy()
+    {
+        _presenter?.Dispose();
+        _presenter = null;
+    }
+
+    public void SetReviveCount(int count) =>
+        _reviveCountText.text = $"第{count + 1}回";
+}
+```
+
+```csharp
+// TitlePresenter.cs — extends Presenter<TView>; scene-bound presenters add
+// their own InitializeAsync because there is no UI stack pushing the view.
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using StickerFwk.Core.Presentation;
+
+public class TitlePresenter : Presenter<TitleView>
+{
+    readonly PlayerDataService _playerData;
+
+    public TitlePresenter(PlayerDataService playerData) { _playerData = playerData; }
+
+    protected override void OnBind(TitleView view)
+    {
+        view.OnStartButtonPressed += HandleStartButtonPressed;
+    }
+
+    protected override void OnUnbind(TitleView view)
+    {
+        view.OnStartButtonPressed -= HandleStartButtonPressed;
+    }
+
+    public UniTask InitializeAsync(CancellationToken ct)
+    {
+        View.SetReviveCount(_playerData.GetReviveCount());
+        return UniTask.CompletedTask;
+    }
+
+    void HandleStartButtonPressed() { /* ... */ }
+}
+```
+
+```csharp
+// TitleScope.cs — feature LifetimeScope
+using VContainer;
+using VContainer.Unity;
+
+public class TitleScope : LifetimeScope
+{
+    protected override void Configure(IContainerBuilder builder)
+    {
+        // RegisterComponentInHierarchy fires the view's [Inject] hook during
+        // scope build, which resolves and binds the presenter.
+        builder.RegisterComponentInHierarchy<TitleView>();
+        builder.Register<TitlePresenter>(Lifetime.Scoped);
+    }
+}
+```
+
+> **Caveat:** because there is no UI stack involved, navigating *away* from a
+> scene-bound view is the application's responsibility (typically by triggering
+> an `ISceneTransitionService.TransitionToSceneAsync(...)` from the presenter
+> in response to a button press). When the scene unloads, `OnDestroy` fires
+> dispose.
+
+---
+
 ## Root LifetimeScope (One Per App)
 
 Your app needs a single root scope that registers all framework services. Create this once:

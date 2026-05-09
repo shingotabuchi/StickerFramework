@@ -61,10 +61,12 @@ namespace StickerFwk.Infrastructure.UI
         public async UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
             var popped = await _inner.Pop(layer, ct);
-            if (popped)
-            {
-                RemoveLastMatch(v => v.Layer == layer);
-            }
+            // Intentionally do NOT call RemoveLastMatch here. The inner service pops the TOP of
+            // the layer stack, while RemoveLastMatch would remove the most-recently-tracked
+            // entry matching the predicate. When the same layer holds windows from multiple
+            // scopes (or this scope pushed more than one window to the layer), those two are
+            // not guaranteed to refer to the same instance, so we would corrupt tracking.
+            // PruneDead clears destroyed views on the next interaction, which is sufficient.
             PruneDead();
             return popped;
         }
@@ -72,10 +74,10 @@ namespace StickerFwk.Infrastructure.UI
         public async UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
         {
             var popped = await _inner.Pop<T>(ct);
-            if (popped)
-            {
-                RemoveLastMatch(v => v is T);
-            }
+            // See Pop(UILayer): RemoveLastMatch by type would mis-track when the same type is
+            // pushed twice (or pushed by a different scope sharing the inner service). The
+            // identity-based Pop(WindowView) overload below is the precise one. Stale entries
+            // are pruned lazily when their GameObject is destroyed.
             PruneDead();
             return popped;
         }
@@ -216,23 +218,6 @@ namespace StickerFwk.Infrastructure.UI
                 if (_tracked[i] == null)
                 {
                     _tracked.RemoveAt(i);
-                }
-            }
-        }
-
-        void RemoveLastMatch(Func<WindowView, bool> predicate)
-        {
-            for (var i = _tracked.Count - 1; i >= 0; i--)
-            {
-                var view = _tracked[i];
-                if (view == null)
-                {
-                    continue;
-                }
-                if (predicate(view))
-                {
-                    _tracked.RemoveAt(i);
-                    return;
                 }
             }
         }

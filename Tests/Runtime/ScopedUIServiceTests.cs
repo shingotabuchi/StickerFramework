@@ -222,6 +222,12 @@ namespace StickerFwk.Tests.Runtime
                 return UniTask.FromResult((T)(WindowView)_views.Dequeue());
             }
 
+            public UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView, IWindowWithArgs<TArgs>
+            {
+                return Push<T>(tag, options, ct);
+            }
+
             public UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
             {
                 if (PopException != null)
@@ -234,6 +240,12 @@ namespace StickerFwk.Tests.Runtime
 
             public UniTask<T> Replace<T>(string tag = null, WindowOptions options = null,
                 CancellationToken ct = default) where T : WindowView
+            {
+                return Push<T>(tag, options, ct);
+            }
+
+            public UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView, IWindowWithArgs<TArgs>
             {
                 return Push<T>(tag, options, ct);
             }

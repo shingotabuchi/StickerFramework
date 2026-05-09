@@ -573,6 +573,37 @@ await _uiService.Pop<PlinkoWindow>();
 
 ---
 
+### Pushing windows with args
+
+When a window needs data before its `InitializeAsync` runs, implement `IWindowWithArgs<TArgs>`:
+
+```csharp
+public class MatchStartViewArgs
+{
+    public string OpponentName { get; set; }
+    public int RoundNumber { get; set; }
+}
+
+public class MatchStartWindow : WindowView<MatchStartWindow, MatchStartPresenter>, IWindowWithArgs<MatchStartViewArgs>
+{
+    public MatchStartViewArgs Args { get; private set; }
+
+    public void SetArgs(MatchStartViewArgs args) => Args = args;
+}
+```
+
+Then push with the typed overload. `SetArgs` is called after VContainer injection and **before** `OnInitialize`, so presenters can read `Args` inside `InitializeAsync`:
+
+```csharp
+var args = new MatchStartViewArgs { OpponentName = "Player2", RoundNumber = 3 };
+var window = await _uiService.Push<MatchStartWindow, MatchStartViewArgs>(args);
+
+// Replace the top window and pass new args:
+var window = await _uiService.Replace<MatchStartWindow, MatchStartViewArgs>(args);
+```
+
+---
+
 ## Checklist: Adding a New Feature
 
 1. **Create feature folder:** `Assets/Scripts/Features/{Name}/`

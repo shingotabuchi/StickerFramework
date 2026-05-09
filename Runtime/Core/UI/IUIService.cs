@@ -6,11 +6,15 @@ namespace StickerFwk.Core.UI
     public interface IUIService
     {
         UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
+        UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>;
         // Returns true if a window was popped, false if the target stack/window was not found.
         UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default);
         UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView;
         UniTask<bool> Pop(WindowView view, CancellationToken ct = default);
         UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
+        UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>;
         // Returns the number of windows popped from the layer.
         // When immediate is true, hide transitions are skipped and all windows are torn down
         // synchronously in one frame. Use this for "leaving the scene" cases where the

@@ -45,6 +45,19 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
+        public async UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var view = await _inner.Push<T, TArgs>(args, tag, options, ct);
+            if (view != null)
+            {
+                _tracked.Add(view);
+            }
+            return view;
+        }
+
         public async UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
             var popped = await _inner.Pop(layer, ct);
@@ -91,6 +104,19 @@ namespace StickerFwk.Infrastructure.UI
             ThrowIfDisposed();
             PruneDead();
             var view = await _inner.Replace<T>(tag, options, ct);
+            if (view != null)
+            {
+                _tracked.Add(view);
+            }
+            return view;
+        }
+
+        public async UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var view = await _inner.Replace<T, TArgs>(args, tag, options, ct);
             if (view != null)
             {
                 _tracked.Add(view);

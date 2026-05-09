@@ -105,7 +105,19 @@ namespace StickerFwk.Infrastructure.UI
             return $"Views/{name}_{tag}.prefab";
         }
 
-        public async UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+        public UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView
+        {
+            return PushInternal<T>(tag, options, ct, configure: null);
+        }
+
+        public UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            return PushInternal<T>(tag, options, ct, view => view.SetArgs(args));
+        }
+
+        async UniTask<T> PushInternal<T>(string tag, WindowOptions options, CancellationToken ct, Action<T> configure)
             where T : WindowView
         {
             ThrowIfDisposed();
@@ -133,7 +145,7 @@ namespace StickerFwk.Infrastructure.UI
             try
             {
                 // PushLocked takes ownership of windowAsset and disposes it on any failure.
-                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt);
+                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt, configure);
             }
             finally
             {
@@ -230,8 +242,20 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask<T> Replace<T>(string tag = null, WindowOptions options = null,
+        public UniTask<T> Replace<T>(string tag = null, WindowOptions options = null,
             CancellationToken ct = default) where T : WindowView
+        {
+            return ReplaceInternal<T>(tag, options, ct, configure: null);
+        }
+
+        public UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            return ReplaceInternal<T>(tag, options, ct, view => view.SetArgs(args));
+        }
+
+        async UniTask<T> ReplaceInternal<T>(string tag, WindowOptions options, CancellationToken ct, Action<T> configure)
+            where T : WindowView
         {
             ThrowIfDisposed();
             var key = BuildKey<T>(tag);
@@ -273,7 +297,7 @@ namespace StickerFwk.Infrastructure.UI
                 }
 
                 // PushLocked takes ownership of windowAsset and disposes it on any failure.
-                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt);
+                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt, configure);
             }
             finally
             {
@@ -381,7 +405,7 @@ namespace StickerFwk.Infrastructure.UI
         // ---------------------------------------------------------------------
 
         async UniTask<T> PushLocked<T>(string key, WindowAsset<T> windowAsset, WindowOptions options, UILayer layer,
-            CancellationToken ct) where T : WindowView
+            CancellationToken ct, Action<T> configure = null) where T : WindowView
         {
             Log.Info("UIService", $"Pushing window with key '{key}'");
             var prefabWindow = windowAsset.PrefabWindow;
@@ -452,6 +476,7 @@ namespace StickerFwk.Infrastructure.UI
                         $"Instantiated window '{key}' is missing expected component {typeof(T).Name}.");
                 }
 
+                configure?.Invoke(windowView);
                 await windowView.OnInitialize(ct);
 
                 // Read transitions from the INSTANCE, not the prefab — SerializeReference

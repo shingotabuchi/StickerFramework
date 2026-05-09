@@ -460,6 +460,26 @@ namespace StickerFwk.Infrastructure.UI
                 }
 
                 instance = Object.Instantiate(windowAsset.Prefab, layerTransform);
+
+                // Hide the freshly-instantiated window until the show transition begins.
+                // OnInitialize may await async work (e.g. Addressables loads); without this,
+                // the unconfigured prefab would render at full opacity for the duration of
+                // OnInitialize and then "blink" when the show transition resets alpha to 0.
+                // Every shipped transition (Fade/Slide/Scale/None) re-establishes alpha at
+                // the start of Play, so this initial hide is safely overwritten when Show
+                // runs. Authors of custom transitions must do the same.
+                //
+                // Also disable raycasts so the (invisible) prefab can't catch clicks during
+                // the OnInitialize await — the InputBlocker shields lower views, but without
+                // this the new window's own controls would still hit-test.
+                var preShowCanvasGroup = instance.GetComponent<CanvasGroup>();
+                if (preShowCanvasGroup != null)
+                {
+                    preShowCanvasGroup.alpha = 0f;
+                    preShowCanvasGroup.blocksRaycasts = false;
+                    preShowCanvasGroup.interactable = false;
+                }
+
                 var inject = options?.Inject;
                 if (inject != null)
                 {
@@ -490,6 +510,13 @@ namespace StickerFwk.Infrastructure.UI
 
                 windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle, hideTrans, transDuration);
                 stack.Push(windowHandle);
+
+                // Restore raycast/interactable now that init is done; transitions only manage alpha.
+                if (preShowCanvasGroup != null)
+                {
+                    preShowCanvasGroup.blocksRaycasts = true;
+                    preShowCanvasGroup.interactable = true;
+                }
 
                 Log.Info("UIService",
                     $"Playing show transition for window '{key}' of type '{showTrans?.GetType().Name ?? "null"}' with duration {transDuration}s.");

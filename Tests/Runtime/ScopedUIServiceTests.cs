@@ -230,6 +230,11 @@ namespace StickerFwk.Tests.Runtime
 
             public UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
             {
+                return Pop(view, immediate: false, ct);
+            }
+
+            public UniTask<bool> Pop(WindowView view, bool immediate, CancellationToken ct = default)
+            {
                 if (PopException != null)
                 {
                     return UniTask.FromException<bool>(PopException);

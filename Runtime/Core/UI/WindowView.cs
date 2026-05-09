@@ -42,6 +42,18 @@ namespace StickerFwk.Core.UI
             _canvasGroup = GetComponent<CanvasGroup>();
         }
 
+        // Safety net for cases where the GameObject is destroyed without going through the
+        // managed UIService.Pop path — e.g. UIService.PushLocked's catch path destroys the
+        // instance after a failed OnInitialize, or scene unload tears the window down. Without
+        // this, OnDispose never runs, the presenter is never disposed via the framework, and
+        // any asset handles loaded inside InitializeAsync stay live until scope teardown.
+        // OnDispose / Presenter.Dispose are idempotent so a managed Pop followed by Unity's
+        // OnDestroy is safe.
+        protected virtual void OnDestroy()
+        {
+            OnDispose();
+        }
+
         public virtual UniTask OnInitialize(CancellationToken ct) => UniTask.CompletedTask;
 
         public void OnBeforeShow()

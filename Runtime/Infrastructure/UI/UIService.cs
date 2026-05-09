@@ -473,8 +473,15 @@ namespace StickerFwk.Infrastructure.UI
                 // the OnInitialize await — the InputBlocker shields lower views, but without
                 // this the new window's own controls would still hit-test.
                 var preShowCanvasGroup = instance.GetComponent<CanvasGroup>();
+                var originalBlocksRaycasts = false;
+                var originalInteractable = false;
                 if (preShowCanvasGroup != null)
                 {
+                    // Snapshot the prefab-authored raycast/interactable values so we can restore
+                    // them after OnInitialize. Forcing them back to true unconditionally would
+                    // overwrite a deliberately-disabled CanvasGroup on the prefab.
+                    originalBlocksRaycasts = preShowCanvasGroup.blocksRaycasts;
+                    originalInteractable = preShowCanvasGroup.interactable;
                     preShowCanvasGroup.alpha = 0f;
                     preShowCanvasGroup.blocksRaycasts = false;
                     preShowCanvasGroup.interactable = false;
@@ -511,11 +518,12 @@ namespace StickerFwk.Infrastructure.UI
                 windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle, hideTrans, transDuration);
                 stack.Push(windowHandle);
 
-                // Restore raycast/interactable now that init is done; transitions only manage alpha.
+                // Restore raycast/interactable to the prefab-authored values now that init is
+                // done; transitions only manage alpha.
                 if (preShowCanvasGroup != null)
                 {
-                    preShowCanvasGroup.blocksRaycasts = true;
-                    preShowCanvasGroup.interactable = true;
+                    preShowCanvasGroup.blocksRaycasts = originalBlocksRaycasts;
+                    preShowCanvasGroup.interactable = originalInteractable;
                 }
 
                 Log.Info("UIService",

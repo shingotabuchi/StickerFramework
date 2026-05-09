@@ -195,7 +195,7 @@ namespace StickerFwk.Infrastructure.UI
                 await layerLock.WaitAsync(linkedCt);
                 try
                 {
-                    return await PopViewLocked(view, layer, linkedCt);
+                    return await PopViewLocked(view, layer, immediate: false, linkedCt);
                 }
                 finally
                 {
@@ -208,7 +208,12 @@ namespace StickerFwk.Infrastructure.UI
             }
         }
 
-        public async UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
+        public UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
+        {
+            return Pop(view, immediate: false, ct);
+        }
+
+        public async UniTask<bool> Pop(WindowView view, bool immediate, CancellationToken ct = default)
         {
             if (view == null)
             {
@@ -232,7 +237,7 @@ namespace StickerFwk.Infrastructure.UI
                 await layerLock.WaitAsync(linkedCt);
                 try
                 {
-                    return await PopViewLocked(view, layer, linkedCt);
+                    return await PopViewLocked(view, layer, immediate, linkedCt);
                 }
                 finally
                 {
@@ -647,7 +652,7 @@ namespace StickerFwk.Infrastructure.UI
             return true;
         }
 
-        async UniTask<bool> PopViewLocked(WindowView view, UILayer layer, CancellationToken ct)
+        async UniTask<bool> PopViewLocked(WindowView view, UILayer layer, bool immediate, CancellationToken ct)
         {
             var stack = _stacks[layer];
 
@@ -671,12 +676,13 @@ namespace StickerFwk.Infrastructure.UI
 
             if (ReferenceEquals(stack.Peek(), target))
             {
-                return await PopLocked(layer, ct);
+                return immediate ? PopImmediateLocked(layer) : await PopLocked(layer, ct);
             }
 
             // Buried in the stack: remove without playing a hide transition (it isn't
             // visible) but still fire lifecycle hooks and publish the closed event so
-            // bookkeeping stays consistent.
+            // bookkeeping stays consistent. The buried path is naturally "immediate"
+            // regardless of the caller's flag — no transition is ever played here.
             var temp = new List<WindowHandle>(stack.Count);
             while (stack.Count > 0)
             {

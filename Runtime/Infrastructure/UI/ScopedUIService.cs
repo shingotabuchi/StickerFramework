@@ -84,7 +84,12 @@ namespace StickerFwk.Infrastructure.UI
 
         public async UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
         {
-            var popped = await _inner.Pop(view, ct);
+            return await Pop(view, immediate: false, ct);
+        }
+
+        public async UniTask<bool> Pop(WindowView view, bool immediate, CancellationToken ct = default)
+        {
+            var popped = await _inner.Pop(view, immediate, ct);
             if (popped && view != null)
             {
                 for (var i = _tracked.Count - 1; i >= 0; i--)
@@ -190,7 +195,12 @@ namespace StickerFwk.Infrastructure.UI
                 // disposed alongside this scope (its own CTS races our Pop calls, or
                 // the root scope has already torn it down), so swallow those to avoid
                 // spamming the error channel on every shutdown.
-                _inner.Pop(view).Forget(static ex =>
+                // Tear down without playing the hide transition. Scope dispose typically runs
+                // alongside scene unload, so a 0.3s fade after the scene has begun wiping is a
+                // visible artifact and a load-time hitch. The buried-window path inside
+                // PopViewLocked already skips transitions; this also forces the top-of-stack
+                // path through HideWithoutTransition.
+                _inner.Pop(view, immediate: true).Forget(static ex =>
                 {
                     if (ex is OperationCanceledException || ex is ObjectDisposedException)
                     {

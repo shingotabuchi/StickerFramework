@@ -12,6 +12,10 @@ namespace StickerFwk.Core.UI
         UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default);
         UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView;
         UniTask<bool> Pop(WindowView view, CancellationToken ct = default);
+        // When immediate is true, the hide transition is skipped and the window is torn down
+        // synchronously. Use this for "leaving the scene" cases (e.g. scope dispose during
+        // scene unload) where playing the transition after a scene wipe is visible.
+        UniTask<bool> Pop(WindowView view, bool immediate, CancellationToken ct = default);
         UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
         UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
             where T : WindowView, IWindowWithArgs<TArgs>;

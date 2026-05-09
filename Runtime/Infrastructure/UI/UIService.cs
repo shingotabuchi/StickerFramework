@@ -38,6 +38,7 @@ namespace StickerFwk.Infrastructure.UI
         private readonly Dictionary<UILayer, SemaphoreSlim> _layerLocks;
         private readonly SemaphoreSlim _globalLock = new(1, 1);
         private readonly CancellationTokenSource _disposeCts = new();
+        private readonly string _keyPrefix;
         private bool _disposed;
 
         [Inject]
@@ -47,7 +48,8 @@ namespace StickerFwk.Infrastructure.UI
             ICameraService cameraService,
             ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
-            IPublisher<WindowClosedEvent> windowClosedPublisher)
+            IPublisher<WindowClosedEvent> windowClosedPublisher,
+            WindowAssetKeyOptions keyOptions = null)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
@@ -57,6 +59,7 @@ namespace StickerFwk.Infrastructure.UI
             _layerManager = new UILayerManager(cameraService, cameraRegisteredSubscriber);
             _stacks = new Dictionary<UILayer, Stack<WindowHandle>>();
             _layerLocks = new Dictionary<UILayer, SemaphoreSlim>();
+            _keyPrefix = keyOptions?.Prefix ?? string.Empty;
 
             foreach (var layer in AllLayers)
             {
@@ -94,15 +97,15 @@ namespace StickerFwk.Infrastructure.UI
             _layerManager.Initialize();
         }
 
-        static string BuildKey<T>(string tag) where T : WindowView
+        string BuildKey<T>(string tag) where T : WindowView
         {
             var name = typeof(T).Name;
             if (string.IsNullOrEmpty(tag))
             {
-                return $"Views/{name}.prefab";
+                return $"{_keyPrefix}Views/{name}.prefab";
             }
 
-            return $"Views/{name}_{tag}.prefab";
+            return $"{_keyPrefix}Views/{name}_{tag}.prefab";
         }
 
         public UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)

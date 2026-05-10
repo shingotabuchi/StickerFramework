@@ -29,18 +29,29 @@ namespace StickerFwk.Infrastructure.UI
             float transitionDuration,
             CancellationToken ct)
         {
+            StickerFwk.Core.Log.Info("WindowLifecycleRunner", $"Hide enter view='{view?.name ?? "null"}' trans='{transition?.GetType().Name ?? "null"}' duration={transitionDuration} ctCancelled={ct.IsCancellationRequested}");
             view.OnBeforeHide();
             if (transition == null)
             {
                 throw new ArgumentNullException(nameof(transition),
                     $"Window '{view.name}' has no hide transition assigned.");
             }
-            await transition.Play(view, false, transitionDuration, ct);
+            try
+            {
+                await transition.Play(view, false, transitionDuration, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                StickerFwk.Core.Log.Warning("WindowLifecycleRunner", $"Hide cancelled view='{view?.name ?? "null"}'");
+                throw;
+            }
             view.OnHide();
+            StickerFwk.Core.Log.Info("WindowLifecycleRunner", $"Hide exit view='{view?.name ?? "null"}'");
         }
 
         public void HideWithoutTransition(WindowView view)
         {
+            StickerFwk.Core.Log.Warning("WindowLifecycleRunner", $"HideWithoutTransition view='{view?.name ?? "null"}'");
             view.OnBeforeHide();
             view.OnHide();
         }

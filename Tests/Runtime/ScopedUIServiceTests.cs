@@ -228,6 +228,35 @@ namespace StickerFwk.Tests.Runtime
                 return Push<T>(tag, options, ct);
             }
 
+            public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,
+                CancellationToken ct = default) where T : WindowView
+            {
+                var view = await Push<T>(tag, options, ct);
+                return new WindowPushHandle<T>(view, this);
+            }
+
+            public async UniTask<WindowPushHandle<T>> PushWithHandle<T, TArgs>(TArgs args, string tag = null,
+                WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView, IWindowWithArgs<TArgs>
+            {
+                var view = await Push<T, TArgs>(args, tag, options, ct);
+                return new WindowPushHandle<T>(view, this);
+            }
+
+            public UniTask<WindowPushHandle<T>> PushBelow<T>(WindowView coveringView, string tag = null,
+                WindowOptions options = null, CancellationToken ct = default) where T : WindowView
+            {
+                return PushWithHandle<T>(tag, options, ct);
+            }
+
+            public async UniTask<T> PushPrepared<T>(Func<T, CancellationToken, UniTask> prepareAsync, string tag = null,
+                WindowOptions options = null, CancellationToken ct = default) where T : WindowView
+            {
+                var view = await Push<T>(tag, options, ct);
+                await prepareAsync(view, ct);
+                return view;
+            }
+
             public UniTask<bool> Pop(WindowView view, CancellationToken ct = default)
             {
                 return Pop(view, immediate: false, ct);

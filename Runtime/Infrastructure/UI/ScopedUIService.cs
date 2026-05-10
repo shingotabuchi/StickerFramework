@@ -58,6 +58,59 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
+        public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,
+            CancellationToken ct = default) where T : WindowView
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var handle = await _inner.PushWithHandle<T>(tag, options, ct);
+            if (handle.View != null)
+            {
+                _tracked.Add(handle.View);
+            }
+            return handle;
+        }
+
+        public async UniTask<WindowPushHandle<T>> PushWithHandle<T, TArgs>(TArgs args, string tag = null,
+            WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var handle = await _inner.PushWithHandle<T, TArgs>(args, tag, options, ct);
+            if (handle.View != null)
+            {
+                _tracked.Add(handle.View);
+            }
+            return handle;
+        }
+
+        public async UniTask<WindowPushHandle<T>> PushBelow<T>(WindowView coveringView, string tag = null,
+            WindowOptions options = null, CancellationToken ct = default) where T : WindowView
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var handle = await _inner.PushBelow<T>(coveringView, tag, options, ct);
+            if (handle.View != null)
+            {
+                _tracked.Add(handle.View);
+            }
+            return handle;
+        }
+
+        public async UniTask<T> PushPrepared<T>(Func<T, CancellationToken, UniTask> prepareAsync, string tag = null,
+            WindowOptions options = null, CancellationToken ct = default) where T : WindowView
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var view = await _inner.PushPrepared<T>(prepareAsync, tag, options, ct);
+            if (view != null)
+            {
+                _tracked.Add(view);
+            }
+            return view;
+        }
+
         public async UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default)
         {
             var popped = await _inner.Pop(layer, ct);

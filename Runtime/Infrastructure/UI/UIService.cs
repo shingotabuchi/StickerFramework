@@ -120,7 +120,47 @@ namespace StickerFwk.Infrastructure.UI
             return PushInternal<T>(tag, options, ct, view => view.SetArgs(args));
         }
 
-        async UniTask<T> PushInternal<T>(string tag, WindowOptions options, CancellationToken ct, Action<T> configure)
+        public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,
+            CancellationToken ct = default) where T : WindowView
+        {
+            var view = await Push<T>(tag, options, ct);
+            return new WindowPushHandle<T>(view, this);
+        }
+
+        public async UniTask<WindowPushHandle<T>> PushWithHandle<T, TArgs>(TArgs args, string tag = null,
+            WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            var view = await Push<T, TArgs>(args, tag, options, ct);
+            return new WindowPushHandle<T>(view, this);
+        }
+
+        public async UniTask<WindowPushHandle<T>> PushBelow<T>(WindowView coveringView, string tag = null,
+            WindowOptions options = null, CancellationToken ct = default) where T : WindowView
+        {
+            if (coveringView == null)
+            {
+                throw new ArgumentNullException(nameof(coveringView));
+            }
+
+            var view = await PushInternal<T>(tag, options, ct, configure: null, prepareBeforeShow: null,
+                afterInitializeBeforeShow: pushedView => PositionBelow(pushedView, coveringView));
+            return new WindowPushHandle<T>(view, this);
+        }
+
+        public UniTask<T> PushPrepared<T>(Func<T, CancellationToken, UniTask> prepareAsync, string tag = null,
+            WindowOptions options = null, CancellationToken ct = default) where T : WindowView
+        {
+            if (prepareAsync == null)
+            {
+                throw new ArgumentNullException(nameof(prepareAsync));
+            }
+
+            return PushInternal<T>(tag, options, ct, configure: null, prepareBeforeShow: prepareAsync);
+        }
+
+        async UniTask<T> PushInternal<T>(string tag, WindowOptions options, CancellationToken ct, Action<T> configure,
+            Func<T, CancellationToken, UniTask> prepareBeforeShow = null, Action<T> afterInitializeBeforeShow = null)
             where T : WindowView
         {
             ThrowIfDisposed();
@@ -148,7 +188,8 @@ namespace StickerFwk.Infrastructure.UI
             try
             {
                 // PushLocked takes ownership of windowAsset and disposes it on any failure.
-                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt, configure);
+                return await PushLocked<T>(key, windowAsset, options, layer, linkedCt, configure,
+                    prepareBeforeShow, afterInitializeBeforeShow);
             }
             finally
             {
@@ -413,7 +454,9 @@ namespace StickerFwk.Infrastructure.UI
         // ---------------------------------------------------------------------
 
         async UniTask<T> PushLocked<T>(string key, WindowAsset<T> windowAsset, WindowOptions options, UILayer layer,
-            CancellationToken ct, Action<T> configure = null) where T : WindowView
+            CancellationToken ct, Action<T> configure = null,
+            Func<T, CancellationToken, UniTask> prepareBeforeShow = null,
+            Action<T> afterInitializeBeforeShow = null) where T : WindowView
         {
             Log.Info("UIService", $"Pushing window with key '{key}'");
             var prefabWindow = windowAsset.PrefabWindow;
@@ -513,6 +556,11 @@ namespace StickerFwk.Infrastructure.UI
 
                 configure?.Invoke(windowView);
                 await windowView.OnInitialize(ct);
+                afterInitializeBeforeShow?.Invoke(windowView);
+                if (prepareBeforeShow != null)
+                {
+                    await prepareBeforeShow(windowView, ct);
+                }
 
                 // Read transitions from the INSTANCE, not the prefab — SerializeReference
                 // strategy data lives inline and any UnityEngine.Object refs inside it are
@@ -706,6 +754,25 @@ namespace StickerFwk.Infrastructure.UI
 
             _windowClosedPublisher.Publish(new WindowClosedEvent(closedKey, layer));
             return true;
+        }
+
+        static void PositionBelow(WindowView view, WindowView coveringView)
+        {
+            if (view == null || coveringView == null)
+            {
+                Debug.LogWarning("[UIService] PushBelow skipped sibling reorder because one of the views was destroyed.");
+                return;
+            }
+
+            var viewParent = view.transform.parent;
+            var coveringParent = coveringView.transform.parent;
+            if (viewParent != null && ReferenceEquals(viewParent, coveringParent))
+            {
+                view.transform.SetSiblingIndex(coveringView.transform.GetSiblingIndex());
+                return;
+            }
+
+            Debug.LogWarning("[UIService] PushBelow skipped sibling reorder because the pushed and covering windows do not share a parent.");
         }
 
         bool TryFindLayerOf<T>(out UILayer layer, out WindowView view) where T : WindowView

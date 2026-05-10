@@ -604,6 +604,38 @@ var window = await _uiService.Replace<MatchStartWindow, MatchStartViewArgs>(args
 
 ---
 
+### Push handle, push below, push prepared
+
+Use `PushWithHandle` when ownership should stay with the caller and close the exact instance later:
+
+```csharp
+var handle = await _uiService.PushWithHandle<ResultWindow>(options: windowOptions, ct: ct);
+await handle.PopAsync(ct);          // plays hide transition
+await handle.PopImmediateAsync(ct); // skips hide transition
+```
+
+Use `PushBelow` for compound flows where the new window should be the logical top of the stack but render below an existing covering window:
+
+```csharp
+var animation = await _uiService.PushWithHandle<GachaAnimationWindow>(options: nonBlockingOptions, ct: ct);
+var result = await _uiService.PushBelow<GachaResultWindow>(animation.View, options: nonBlockingOptions, ct: ct);
+```
+
+`PushBelow` only reorders siblings when both windows share a parent. Blocking windows create an input blocker sibling; for below-push flows, prefer `WindowOptions { IsBlocking = false }` unless you intentionally manage blocker order.
+
+Use `PushPrepared` to initialize a hidden window, populate it asynchronously, then show it only after preparation succeeds:
+
+```csharp
+var swap = await _uiService.PushPrepared<CardSwapWindow>(async (view, token) =>
+{
+    await view.PopulateAsync(model, token);
+}, options: nonBlockingOptions, ct: ct);
+```
+
+If preparation is canceled or throws before the show phase, the instantiated GameObject is destroyed and the exception is rethrown.
+
+---
+
 ## Checklist: Adding a New Feature
 
 1. **Create feature folder:** `Assets/Scripts/Features/{Name}/`

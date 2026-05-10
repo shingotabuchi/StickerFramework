@@ -29,11 +29,16 @@ namespace StickerFwk.Core.UI
             // (e.g. right after SceneManager.LoadSceneAsync completes) doesn't consume
             // the entire transition in a single tick.
             await UniTask.Yield(PlayerLoopTiming.Update, ct);
+            // Cap per-frame progress so a single hitched frame (scene-load Awake/OnEnable
+            // bursts can easily spike to 200-300ms) can't consume the entire fade in one
+            // step and snap the alpha to near-end. This means the fade may take longer
+            // in real time on a hitched frame, but it stays visible.
+            const float MaxStepSeconds = 1f / 30f;
             var iterations = 0;
             while (elapsed < duration)
             {
                 ct.ThrowIfCancellationRequested();
-                elapsed += Time.unscaledDeltaTime;
+                elapsed += Mathf.Min(Time.unscaledDeltaTime, MaxStepSeconds);
                 var t = Mathf.Clamp01(elapsed / duration);
                 var eased = 1f - (1f - t) * (1f - t);
                 canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, eased);

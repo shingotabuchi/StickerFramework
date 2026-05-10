@@ -190,10 +190,9 @@ namespace StickerFwk.Tests.Runtime
 
                 await scoped.Push<TestWindowView>();
 
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(".*Pop during scope dispose failed.*"));
                 scoped.Dispose();
                 await UniTask.Yield();
-
-                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(".*Pop during scope dispose failed.*"));
             }
             finally
             {

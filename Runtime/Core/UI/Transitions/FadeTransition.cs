@@ -38,6 +38,11 @@ namespace StickerFwk.Core.UI
                 var eased = 1f - (1f - t) * (1f - t);
                 canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, eased);
                 iterations++;
+                if (!isShow)
+                {
+                    var canvas = canvasGroup.GetComponentInParent<Canvas>();
+                    UnityEngine.Debug.Log($"[FadeDbg] Fade.tick view='{view.name}' iter={iterations} elapsed={elapsed:F3} alpha={canvasGroup.alpha:F3} cgEnabled={canvasGroup.enabled} cgInteractable={canvasGroup.interactable} goActive={view.gameObject.activeInHierarchy} canvasEnabled={canvas?.enabled} canvasSortOrder={canvas?.sortingOrder} worldCam='{canvas?.worldCamera?.name ?? "null"}'");
+                }
                 await UniTask.Yield(PlayerLoopTiming.Update, ct);
             }
 

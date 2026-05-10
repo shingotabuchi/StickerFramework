@@ -22,6 +22,10 @@ namespace StickerFwk.Core.UI
             }
 
             var elapsed = 0f;
+            // Yield once before starting the timer so a giant first-frame deltaTime
+            // (e.g. right after SceneManager.LoadSceneAsync completes) doesn't consume
+            // the entire transition in a single tick.
+            await UniTask.Yield(PlayerLoopTiming.Update, ct);
             while (elapsed < duration)
             {
                 ct.ThrowIfCancellationRequested();

@@ -57,6 +57,14 @@ namespace StickerFwk.Tests.Runtime
             public UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
                 where T : WindowView, IWindowWithArgs<TArgs> => throw new NotSupportedException();
             public UniTask<int> PopAll(UILayer layer, bool immediate = false, CancellationToken ct = default) => throw new NotSupportedException();
+            public UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView => throw new NotSupportedException();
+            public UniTask<WindowPushHandle<T>> PushWithHandle<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView, IWindowWithArgs<TArgs> => throw new NotSupportedException();
+            public UniTask<WindowPushHandle<T>> PushBelow<T>(WindowView coveringView, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView => throw new NotSupportedException();
+            public UniTask<T> PushPrepared<T>(Func<T, CancellationToken, UniTask> prepareAsync, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView => throw new NotSupportedException();
             public bool IsOpen<T>() where T : WindowView => false;
             public T GetWindow<T>() where T : WindowView => null;
             public int GetStackCount(UILayer layer) => 0;

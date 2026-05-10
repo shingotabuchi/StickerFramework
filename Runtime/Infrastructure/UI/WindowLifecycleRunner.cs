@@ -29,29 +29,18 @@ namespace StickerFwk.Infrastructure.UI
             float transitionDuration,
             CancellationToken ct)
         {
-            UnityEngine.Debug.Log($"[FadeDbg] " + $"Hide enter view='{view?.name ?? "null"}' trans='{transition?.GetType().Name ?? "null"}' duration={transitionDuration} ctCancelled={ct.IsCancellationRequested}");
             view.OnBeforeHide();
             if (transition == null)
             {
                 throw new ArgumentNullException(nameof(transition),
                     $"Window '{view.name}' has no hide transition assigned.");
             }
-            try
-            {
-                await transition.Play(view, false, transitionDuration, ct);
-            }
-            catch (OperationCanceledException)
-            {
-                UnityEngine.Debug.LogWarning($"[FadeDbg] " + $"Hide cancelled view='{view?.name ?? "null"}'");
-                throw;
-            }
+            await transition.Play(view, false, transitionDuration, ct);
             view.OnHide();
-            UnityEngine.Debug.Log($"[FadeDbg] " + $"Hide exit view='{view?.name ?? "null"}'");
         }
 
         public void HideWithoutTransition(WindowView view)
         {
-            UnityEngine.Debug.LogWarning($"[FadeDbg] " + $"HideWithoutTransition view='{view?.name ?? "null"}'");
             view.OnBeforeHide();
             view.OnHide();
         }

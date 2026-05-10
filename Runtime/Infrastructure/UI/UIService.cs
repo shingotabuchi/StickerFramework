@@ -48,8 +48,26 @@ namespace StickerFwk.Infrastructure.UI
             ICameraService cameraService,
             ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
+            IPublisher<WindowClosedEvent> windowClosedPublisher)
+            : this(
+                assetRequester,
+                resolver,
+                cameraService,
+                cameraRegisteredSubscriber,
+                windowOpenedPublisher,
+                windowClosedPublisher,
+                resolver?.ResolveOrDefault<WindowAssetKeyOptions>())
+        {
+        }
+
+        public UIService(
+            IAssetRequester assetRequester,
+            IObjectResolver resolver,
+            ICameraService cameraService,
+            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
+            IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher,
-            WindowAssetKeyOptions keyOptions = null)
+            WindowAssetKeyOptions keyOptions)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
@@ -217,7 +235,6 @@ namespace StickerFwk.Infrastructure.UI
 
         public async UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
         {
-            UnityEngine.Debug.Log($"[FadeDbg] UIService.Pop<{typeof(T).Name}> enter ctCancelled={ct.IsCancellationRequested}");
             ThrowIfDisposed();
             using var linkedCts = LinkToken(ct);
             var linkedCt = linkedCts.Token;
@@ -229,11 +246,9 @@ namespace StickerFwk.Infrastructure.UI
             {
                 if (!TryFindLayerOf<T>(out var layer, out var view))
                 {
-                    UnityEngine.Debug.LogWarning($"[FadeDbg] UIService.Pop<{typeof(T).Name}> NO WINDOW FOUND");
                     Log.Warning("UIService", $"No window of type {typeof(T).Name} found to pop");
                     return false;
                 }
-                UnityEngine.Debug.Log($"[FadeDbg] UIService.Pop<{typeof(T).Name}> found view='{view?.name}' layer={layer}");
 
                 var layerLock = _layerLocks[layer];
                 await layerLock.WaitAsync(linkedCt);
@@ -524,13 +539,15 @@ namespace StickerFwk.Infrastructure.UI
                 // the OnInitialize await — the InputBlocker shields lower views, but without
                 // this the new window's own controls would still hit-test.
                 var preShowCanvasGroup = instance.GetComponent<CanvasGroup>();
+                var originalAlpha = 1f;
                 var originalBlocksRaycasts = false;
                 var originalInteractable = false;
                 if (preShowCanvasGroup != null)
                 {
                     // Snapshot the prefab-authored raycast/interactable values so we can restore
-                    // them after OnInitialize. Forcing them back to true unconditionally would
-                    // overwrite a deliberately-disabled CanvasGroup on the prefab.
+                    // them after OnInitialize. Forcing them back unconditionally would overwrite
+                    // deliberately-authored CanvasGroup values on the prefab.
+                    originalAlpha = preShowCanvasGroup.alpha;
                     originalBlocksRaycasts = preShowCanvasGroup.blocksRaycasts;
                     originalInteractable = preShowCanvasGroup.interactable;
                     preShowCanvasGroup.alpha = 0f;
@@ -575,9 +592,13 @@ namespace StickerFwk.Infrastructure.UI
                 stack.Push(windowHandle);
 
                 // Restore raycast/interactable to the prefab-authored values now that init is
-                // done; transitions only manage alpha.
+                // done. Restore alpha too so transitions that animate something other than the
+                // root CanvasGroup (e.g. Timeline-driven sprite wipes) are visible by default.
+                // Alpha-owning transitions such as Fade/Scale immediately set their own start
+                // value at the beginning of Play.
                 if (preShowCanvasGroup != null)
                 {
+                    preShowCanvasGroup.alpha = originalAlpha;
                     preShowCanvasGroup.blocksRaycasts = originalBlocksRaycasts;
                     preShowCanvasGroup.interactable = originalInteractable;
                 }
@@ -652,10 +673,20 @@ namespace StickerFwk.Infrastructure.UI
                 return false;
             }
 
-            var windowHandle = stack.Pop();
-            UnityEngine.Debug.Log($"[FadeDbg] " + $"PopLocked layer={layer} key='{windowHandle.Key}' hideTrans='{windowHandle.HideTransition?.GetType().Name ?? "null"}' duration={windowHandle.TransitionDuration} ctCancelled={ct.IsCancellationRequested}");
+            var windowHandle = stack.Peek();
             await _windowLifecycleRunner.Hide(windowHandle.View, windowHandle.HideTransition, windowHandle.TransitionDuration, ct);
+            if (_disposed)
+            {
+                return false;
+            }
 
+            if (stack.Count == 0 || !ReferenceEquals(stack.Peek(), windowHandle))
+            {
+                Log.Warning("UIService", $"Window '{windowHandle.Key}' was removed while its hide transition was running.");
+                return false;
+            }
+
+            stack.Pop();
             var key = windowHandle.Key;
             var windowLayer = windowHandle.Layer;
             windowHandle.Dispose();
@@ -728,11 +759,9 @@ namespace StickerFwk.Infrastructure.UI
 
             if (ReferenceEquals(stack.Peek(), target))
             {
-                UnityEngine.Debug.Log($"[FadeDbg] " + $"PopViewLocked top-of-stack path layer={layer} immediate={immediate} key='{target.Key}'");
                 return immediate ? PopImmediateLocked(layer) : await PopLocked(layer, ct);
             }
 
-            UnityEngine.Debug.LogWarning($"[FadeDbg] " + $"PopViewLocked buried path (no transition) layer={layer} key='{target.Key}'");
 
             // Buried in the stack: remove without playing a hide transition (it isn't
             // visible) but still fire lifecycle hooks and publish the closed event so

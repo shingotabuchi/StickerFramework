@@ -2,7 +2,7 @@
   "name": "com.stickerfwk.core",
   "version": "0.1.0",
   "displayName": "Sticker Framework",
-  "description": "Reusable Unity framework with DI, UI, camera, input, rendering, and asset management infrastructure.",
+  "description": "Opinionated Unity framework with DI, UI, camera, input, rendering, and asset management infrastructure.",
   "unity": "6000.0",
   "_pinnedDependencies": {
     "_comment": "Informational only. The git-SHA-pinned packages below were chosen at the time of writing and have no semver visibility in 'dependencies'. To check or update one, run: git ls-remote --tags <upstream-url> | grep <sha-prefix> — if the SHA matches a tag, that's its release; otherwise it's a commit between tags. Bumping a dependency = update the SHA in 'dependencies' and record the new tag/SHA pair below.",
@@ -20,7 +20,6 @@
     "com.unity.addressables": "2.9.1",
     "com.unity.inputsystem": "1.19.0",
     "com.unity.render-pipelines.universal": "17.4.0",
-    "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.12",
     "com.unity.ugui": "2.0.0",
     "jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#177dbda557fd652ce7f5d1647a3621653e094373"

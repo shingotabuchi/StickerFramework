@@ -8,25 +8,60 @@ namespace StickerFwk.Core.Editor.AssetTools
 {
     public static class AddressablesProcessor
     {
-        private static readonly AddressableAssetSettings s_settings;
+        private static AddressableAssetSettings Settings => AddressableAssetSettingsDefaultObject.Settings;
 
-        static AddressablesProcessor()
+        [MenuItem("Tools/Sticker Framework/Addressables/Apply Rules")]
+        public static void ApplyRules()
         {
-            s_settings = AddressableAssetSettingsDefaultObject.Settings;
+            var settings = Settings;
+            if (!EnsureSettings(settings))
+            {
+                return;
+            }
+
+            try
+            {
+                UpdateProgressBar("Applying Addressable Group Settings...", 0.2f);
+                ApplyGroupSettings(settings);
+
+                UpdateProgressBar("Processing Duplicates...", 0.8f);
+                DuplicatesProcessor.SetDuplicatesAsAddressable();
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+                EditorUtility.SetDirty(settings);
+                AssetDatabase.Refresh();
+            }
         }
 
-        [MenuItem("Tools/Addressables/Reset and Setup")]
+        [MenuItem("Tools/Sticker Framework/Addressables/Danger Zone/Clear All and Apply Rules")]
         public static void ResetAndSetup()
         {
+            var settings = Settings;
+            if (!EnsureSettings(settings))
+            {
+                return;
+            }
+
+            if (!EditorUtility.DisplayDialog(
+                    "Clear All Addressables?",
+                    "This will remove every Addressables entry from every group in this project, then reapply Sticker Framework rules. This cannot be scoped automatically.",
+                    "Clear All and Apply",
+                    "Cancel"))
+            {
+                return;
+            }
+
             try
             {
                 // 1. Clear Addressables
                 UpdateProgressBar("Clearing all Addressable groups...", 0.0f);
-                ClearAllAddressables();
+                ClearAllAddressables(settings);
 
                 // 2. Apply Settings
                 UpdateProgressBar("Applying Addressable Group Settings...", 0.2f);
-                ApplyGroupSettings();
+                ApplyGroupSettings(settings);
 
                 // 3. Process Duplicates
                 UpdateProgressBar("Processing Duplicates...", 0.8f);
@@ -35,17 +70,31 @@ namespace StickerFwk.Core.Editor.AssetTools
             finally
             {
                 EditorUtility.ClearProgressBar();
-                EditorUtility.SetDirty(s_settings);
+                EditorUtility.SetDirty(settings);
                 AssetDatabase.Refresh();
             }
         }
 
-        private static void ClearAllAddressables()
+        private static bool EnsureSettings(AddressableAssetSettings settings)
+        {
+            if (settings != null)
+            {
+                return true;
+            }
+
+            EditorUtility.DisplayDialog(
+                "Addressables Settings Missing",
+                "Create Addressables settings before applying Sticker Framework Addressables rules.",
+                "OK");
+            return false;
+        }
+
+        private static void ClearAllAddressables(AddressableAssetSettings settings)
         {
             // Remove all assets from all groups
             // We iterate backwards or use a list copy to avoid modification during iteration issues if we were removing groups,
             // but here we are removing entries from groups.
-            foreach (var group in s_settings.groups)
+            foreach (var group in settings.groups)
             {
                 if (group == null) continue;
 
@@ -53,11 +102,11 @@ namespace StickerFwk.Core.Editor.AssetTools
                 // Default group and Built-in data usually shouldn't be touched in a way that breaks them, 
                 // but RemoveAllAssetsInGroup handles entries.
 
-                AddressablesTools.RemoveAllAssetsInGroup(s_settings, group);
+                AddressablesTools.RemoveAllAssetsInGroup(settings, group);
             }
         }
 
-        private static void ApplyGroupSettings()
+        private static void ApplyGroupSettings(AddressableAssetSettings addressableSettings)
         {
             var settings = AddressableGroupSettings.GetOrCreate();
             settings.CompileRegexes();
@@ -68,7 +117,7 @@ namespace StickerFwk.Core.Editor.AssetTools
             {
                 if (groupSetting.Disabled) continue;
 
-                var group = AddressablesTools.GetOrCreateGroup(s_settings, groupSetting.GroupName);
+                var group = AddressablesTools.GetOrCreateGroup(addressableSettings, groupSetting.GroupName);
 
                 for (var i = 0; i < groupSetting.CompiledAssetPathRules.Length; i++)
                 {
@@ -95,7 +144,7 @@ namespace StickerFwk.Core.Editor.AssetTools
 
                         if (assetPathRule.IsMatch(assetPath))
                         {
-                            var entry = s_settings.CreateOrMoveEntry(guid, group);
+                            var entry = addressableSettings.CreateOrMoveEntry(guid, group);
 
                             if (entry != null)
                             {
@@ -106,7 +155,7 @@ namespace StickerFwk.Core.Editor.AssetTools
                                     if (labelRegex.IsMatch(assetPath))
                                     {
                                         var labelName = labelRegex.GetLabel(assetPath);
-                                        s_settings.AddLabel(labelName);
+                                        addressableSettings.AddLabel(labelName);
                                         entry.SetLabel(labelName, true, true);
                                     }
                             }
@@ -187,7 +236,7 @@ namespace StickerFwk.Core.Editor.AssetTools
 
         private static void UpdateProgressBar(string message, float progress)
         {
-            EditorUtility.DisplayProgressBar("Addressables Reset and Setup", message, progress);
+            EditorUtility.DisplayProgressBar("Sticker Framework Addressables", message, progress);
         }
     }
 }

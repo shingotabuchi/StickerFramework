@@ -19,18 +19,20 @@ namespace StickerFwk.Infrastructure.UI
             string transitionViewTag = null,
             CancellationToken ct = default)
         {
-            UnityEngine.Debug.Log($"[FadeDbg] ScreenTransitionService.ExecuteAsync ENTER tag='{transitionViewTag}' ctCancelled={ct.IsCancellationRequested}");
             // 1. Push overlay — awaits show transition so screen is fully covered
             await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
-            UnityEngine.Debug.Log($"[FadeDbg] ScreenTransitionService AFTER PUSH tag='{transitionViewTag}' ctCancelled={ct.IsCancellationRequested}");
 
-            // 2. Run the caller's action while screen is covered
-            await action(ct);
-            UnityEngine.Debug.Log($"[FadeDbg] ScreenTransitionService AFTER ACTION tag='{transitionViewTag}' ctCancelled={ct.IsCancellationRequested}");
-
-            // 3. Pop overlay — awaits hide transition to reveal
-            await _uiService.Pop<ScreenTransitionView>(ct);
-            UnityEngine.Debug.Log($"[FadeDbg] ScreenTransitionService AFTER POP tag='{transitionViewTag}' ctCancelled={ct.IsCancellationRequested}");
+            try
+            {
+                // 2. Run the caller's action while screen is covered
+                await action(ct);
+            }
+            finally
+            {
+                // 3. Pop overlay — awaits hide transition to reveal. Use an uncancelled
+                // caller token so a cancelled load does not leave the overlay stuck.
+                await _uiService.Pop<ScreenTransitionView>(CancellationToken.None);
+            }
         }
     }
 }

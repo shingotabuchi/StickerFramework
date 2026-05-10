@@ -127,10 +127,17 @@ namespace StickerFwk.Infrastructure.UI
         public async UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
         {
             var popped = await _inner.Pop<T>(ct);
-            // See Pop(UILayer): RemoveLastMatch by type would mis-track when the same type is
-            // pushed twice (or pushed by a different scope sharing the inner service). The
-            // identity-based Pop(WindowView) overload below is the precise one. Stale entries
-            // are pruned lazily when their GameObject is destroyed.
+            if (popped)
+            {
+                for (var i = _tracked.Count - 1; i >= 0; i--)
+                {
+                    if (_tracked[i] is T)
+                    {
+                        _tracked.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
             PruneDead();
             return popped;
         }

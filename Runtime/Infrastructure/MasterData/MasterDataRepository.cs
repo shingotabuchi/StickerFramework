@@ -40,47 +40,68 @@ namespace StickerFwk.Infrastructure.MasterData
                 return;
             }
 
-            _preloadHandle = await _assetRequester.PreloadFromLabel<ScriptableObject>(MasterDataLabel, ct);
+            var preloadHandle = await _assetRequester.PreloadFromLabel<ScriptableObject>(MasterDataLabel, ct);
+            var tables = new Dictionary<Type, List<IMasterData>>();
+            var indices = new Dictionary<Type, Dictionary<string, IMasterData>>();
 
-            foreach (var key in _preloadHandle.Keys)
+            try
             {
-                var so = _assetRequester.GetAssetImmediate<ScriptableObject>(key);
-                if (so is not IMasterDataScriptableObject masterDataSo)
+                foreach (var key in preloadHandle.Keys)
                 {
-                    var actualType = so != null ? so.GetType().Name : "null";
-                    throw new InvalidOperationException(
-                        $"Asset '{key}' loaded under label '{MasterDataLabel}' is not an {nameof(IMasterDataScriptableObject)} (actual type: {actualType}). " +
-                        "All assets tagged with the MasterData label must implement IMasterDataScriptableObject.");
-                }
-
-                var type = masterDataSo.Type;
-                var data = masterDataSo.Data;
-
-                if (!_tables.TryGetValue(type, out var table))
-                {
-                    table = new List<IMasterData>();
-                    _tables.Add(type, table);
-                }
-
-                if (!_indices.TryGetValue(type, out var index))
-                {
-                    index = new Dictionary<string, IMasterData>();
-                    _indices.Add(type, index);
-                }
-
-                foreach (var entry in data)
-                {
-                    if (!index.TryAdd(entry.Id, entry))
+                    var so = _assetRequester.GetAssetImmediate<ScriptableObject>(key);
+                    if (so is not IMasterDataScriptableObject masterDataSo)
                     {
+                        var actualType = so != null ? so.GetType().Name : "null";
                         throw new InvalidOperationException(
-                            $"Duplicate master data id '{entry.Id}' detected for type {type.Name} while loading asset '{key}'. " +
-                            "Master data ids must be unique within a type.");
+                            $"Asset '{key}' loaded under label '{MasterDataLabel}' is not an {nameof(IMasterDataScriptableObject)} (actual type: {actualType}). " +
+                            "All assets tagged with the MasterData label must implement IMasterDataScriptableObject.");
                     }
 
-                    table.Add(entry);
-                }
+                    var type = masterDataSo.Type;
+                    var data = masterDataSo.Data;
 
-                Log.Info($"Loaded master data asset: {key} ({type.Name}, {data.Count} entries)");
+                    if (!tables.TryGetValue(type, out var table))
+                    {
+                        table = new List<IMasterData>();
+                        tables.Add(type, table);
+                    }
+
+                    if (!indices.TryGetValue(type, out var index))
+                    {
+                        index = new Dictionary<string, IMasterData>();
+                        indices.Add(type, index);
+                    }
+
+                    foreach (var entry in data)
+                    {
+                        if (!index.TryAdd(entry.Id, entry))
+                        {
+                            throw new InvalidOperationException(
+                                $"Duplicate master data id '{entry.Id}' detected for type {type.Name} while loading asset '{key}'. " +
+                                "Master data ids must be unique within a type.");
+                        }
+
+                        table.Add(entry);
+                    }
+
+                    Log.Info($"Loaded master data asset: {key} ({type.Name}, {data.Count} entries)");
+                }
+            }
+            catch
+            {
+                preloadHandle.Dispose();
+                throw;
+            }
+
+            _preloadHandle = preloadHandle;
+            foreach (var pair in tables)
+            {
+                _tables.Add(pair.Key, pair.Value);
+            }
+
+            foreach (var pair in indices)
+            {
+                _indices.Add(pair.Key, pair.Value);
             }
 
             Log.Info($"MasterDataRepository loaded {_tables.Count} table(s).");

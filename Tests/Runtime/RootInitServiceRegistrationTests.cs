@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -54,12 +55,46 @@ namespace StickerFwk.Tests.Runtime
 
             var settings = container.Resolve<RootInitSettings>();
             Assert.AreSame(RootInitSettings.Default, settings);
+            Assert.That(settings.TargetFrameRate, Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void StartAsync_FailureCompletesInitializationWithException()
+        {
+            var expected = new InvalidOperationException("load failed");
+            var service = new RootInitService(
+                new StubMasterDataRepository(_ => UniTask.FromException(expected), isLoaded: false),
+                RootInitSettings.Default);
+
+            Assert.CatchAsync<InvalidOperationException>(async () => await service.StartAsync(CancellationToken.None).AsTask());
+            Assert.CatchAsync<InvalidOperationException>(async () => await service.Initialization.AsTask());
+        }
+
+        [Test]
+        public void StartAsync_CancellationCompletesInitializationAsCanceled()
+        {
+            var service = new RootInitService(
+                new StubMasterDataRepository(ct => UniTask.FromCanceled(ct), isLoaded: false),
+                RootInitSettings.Default);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            Assert.CatchAsync<OperationCanceledException>(async () => await service.StartAsync(cts.Token).AsTask());
+            Assert.CatchAsync<OperationCanceledException>(async () => await service.Initialization.AsTask());
         }
 
         private sealed class StubMasterDataRepository : IMasterDataRepository
         {
-            public bool IsLoaded => true;
-            public UniTask LoadAsync(CancellationToken ct = default) => UniTask.CompletedTask;
+            readonly Func<CancellationToken, UniTask> _load;
+
+            public StubMasterDataRepository(Func<CancellationToken, UniTask> load = null, bool isLoaded = true)
+            {
+                _load = load ?? (_ => UniTask.CompletedTask);
+                IsLoaded = isLoaded;
+            }
+
+            public bool IsLoaded { get; }
+            public UniTask LoadAsync(CancellationToken ct = default) => _load(ct);
             public IReadOnlyList<T> GetAll<T>() where T : class, IMasterData => System.Array.Empty<T>();
             public T Get<T>(string id) where T : class, IMasterData => null;
             public bool TryGet<T>(string id, out T data) where T : class, IMasterData

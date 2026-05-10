@@ -22,11 +22,17 @@ namespace StickerFwk.Infrastructure.UI
             // 1. Push overlay — awaits show transition so screen is fully covered
             await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
 
-            // 2. Run the caller's action while screen is covered
-            await action(ct);
-
-            // 3. Pop overlay — awaits hide transition to reveal
-            await _uiService.Pop<ScreenTransitionView>(ct);
+            try
+            {
+                // 2. Run the caller's action while screen is covered
+                await action(ct);
+            }
+            finally
+            {
+                // 3. Pop overlay — awaits hide transition to reveal. Use an uncancelled
+                // caller token so a cancelled load does not leave the overlay stuck.
+                await _uiService.Pop<ScreenTransitionView>(CancellationToken.None);
+            }
         }
     }
 }

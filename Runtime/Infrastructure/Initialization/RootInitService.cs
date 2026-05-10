@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core;
@@ -23,18 +24,31 @@ namespace StickerFwk.Infrastructure.Initialization
 
         public async UniTask StartAsync(CancellationToken cancellation)
         {
-            UnityEngine.Application.targetFrameRate = _settings.TargetFrameRate;
-
-            Log.Info("RootInitService", "Root initialization started.");
-
-            if (!_masterDataRepository.IsLoaded)
+            try
             {
-                await _masterDataRepository.LoadAsync(cancellation);
-                Log.Info("RootInitService", "Master data loaded.");
-            }
+                UnityEngine.Application.targetFrameRate = _settings.TargetFrameRate;
 
-            _completionSource.TrySetResult();
-            Log.Info("RootInitService", "Root initialization complete.");
+                Log.Info("RootInitService", "Root initialization started.");
+
+                if (!_masterDataRepository.IsLoaded)
+                {
+                    await _masterDataRepository.LoadAsync(cancellation);
+                    Log.Info("RootInitService", "Master data loaded.");
+                }
+
+                _completionSource.TrySetResult();
+                Log.Info("RootInitService", "Root initialization complete.");
+            }
+            catch (OperationCanceledException)
+            {
+                _completionSource.TrySetCanceled();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _completionSource.TrySetException(ex);
+                throw;
+            }
         }
     }
 }

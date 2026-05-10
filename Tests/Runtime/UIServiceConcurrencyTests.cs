@@ -224,11 +224,9 @@ namespace StickerFwk.Tests.Runtime
             var service = NewService(requester);
 
             // Seed the stack with two A windows, each gated on its own hide transition.
-            // PopLocked removes a window synchronously before awaiting its hide, so to
-            // keep the scan target alive at scan time we need an op that holds the layer
-            // lock while there are still entries on the stack — PopAll iterates pop+await
-            // in one lock hold, so during iteration #1 the second seed entry is still
-            // present.
+            // PopLocked keeps a window tracked until its hide transition completes, so
+            // Pop<T> can scan an entry that PopAll removes before Pop<T> receives the
+            // layer lock.
             var seedShow1 = new ControllableTransition("seed1-show", autoComplete: true);
             var seedHide1 = new ControllableTransition("seed1-hide");
             await service.Push<TestWindowViewA>(
@@ -240,32 +238,31 @@ namespace StickerFwk.Tests.Runtime
                 options: NewOptions(seedShow2, seedHide2)).AsTask();
             Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(2));
 
-            // PopAll holds the layer lock for the whole drain. Iteration 1 pops the top
-            // window (seed2) synchronously then awaits seedHide2 — at this point seed1 is
-            // still on the stack.
+            // PopAll holds the layer lock for the whole drain. Iteration 1 awaits seed2's
+            // hide while seed2 remains tracked.
             var popAllTask = service.PopAll(UILayer.UI).AsTask();
             await seedHide2.WaitForPlayAsync();
             Assert.That(seedHide2.PlayInvocations, Is.EqualTo(1),
                 "PopAll should be running iteration 1's hide for the top window");
-            Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(1),
-                "iteration 1 has popped seed2; seed1 is still on the stack");
+            Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(2),
+                "seed2 should remain tracked until its hide transition completes");
 
-            // Pop<T> takes the global lock, scans, finds seed1 (still on the stack),
-            // then awaits the layer lock — held by PopAll. PopAll iteration 2 will pop
-            // seed1 synchronously before Pop<T> ever gets the layer lock.
+            // Pop<T> takes the global lock, scans, finds seed2, then awaits the layer
+            // lock — held by PopAll. PopAll will remove seed2 before Pop<T> ever gets
+            // the layer lock.
             var popGenericTask = service.Pop<TestWindowViewA>().AsTask();
             await YieldOnce();
             Assert.That(popGenericTask.IsCompleted, Is.False,
                 "Pop<T> should be queued on the layer lock");
 
-            // Let iteration 1 finish: seedHide2 completes, loop continues to iteration 2,
-            // pops seed1 synchronously, awaits seedHide1.
+            // Let iteration 1 finish: seedHide2 completes, loop removes seed2 and
+            // continues to iteration 2, then awaits seedHide1 while seed1 remains tracked.
             seedHide2.Complete();
             await seedHide1.WaitForPlayAsync();
             Assert.That(seedHide1.PlayInvocations, Is.EqualTo(1),
                 "PopAll iteration 2 should now be hiding seed1");
-            Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(0),
-                "seed1 has been popped synchronously by iteration 2");
+            Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(1),
+                "seed1 should remain tracked until its hide transition completes");
 
             // Finish iteration 2. PopAll exits and releases the layer lock.
             seedHide1.Complete();
@@ -278,6 +275,23 @@ namespace StickerFwk.Tests.Runtime
             var popGenericResult = await popGenericTask;
             Assert.That(popGenericResult, Is.False,
                 "Pop<T> must rescan after the layer lock handoff and report 'not found'");
+        }
+
+        [Test]
+        public async Task PopKeepsWindowTrackedWhenHideTransitionFails()
+        {
+            var prefab = MakePrefab<TestWindowViewA>(UILayer.UI);
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/TestWindowViewA.prefab", prefab);
+            var service = NewService(requester);
+            await service.Push<TestWindowViewA>(
+                options: NewOptions(new ControllableTransition("show", autoComplete: true), new ThrowingTransition())).AsTask();
+
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await service.Pop(UILayer.UI).AsTask());
+
+            Assert.That(service.GetStackCount(UILayer.UI), Is.EqualTo(1));
+            Assert.That(requester.AssetHandle("Views/TestWindowViewA.prefab").DisposeCount, Is.EqualTo(0),
+                "failed hide should leave the handle owned by the tracked window");
         }
 
         // ---------- Helpers ----------
@@ -379,6 +393,14 @@ namespace StickerFwk.Tests.Runtime
                 {
                     view.CanvasGroup.alpha = isShow ? 1f : 0f;
                 }
+            }
+        }
+
+        sealed class ThrowingTransition : ITransition
+        {
+            public UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
+            {
+                return UniTask.FromException(new InvalidOperationException("hide failed"));
             }
         }
 

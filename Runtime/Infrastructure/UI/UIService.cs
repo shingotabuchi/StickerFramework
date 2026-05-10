@@ -601,9 +601,20 @@ namespace StickerFwk.Infrastructure.UI
                 return false;
             }
 
-            var windowHandle = stack.Pop();
+            var windowHandle = stack.Peek();
             await _windowLifecycleRunner.Hide(windowHandle.View, windowHandle.HideTransition, windowHandle.TransitionDuration, ct);
+            if (_disposed)
+            {
+                return false;
+            }
 
+            if (stack.Count == 0 || !ReferenceEquals(stack.Peek(), windowHandle))
+            {
+                Log.Warning("UIService", $"Window '{windowHandle.Key}' was removed while its hide transition was running.");
+                return false;
+            }
+
+            stack.Pop();
             var key = windowHandle.Key;
             var windowLayer = windowHandle.Layer;
             windowHandle.Dispose();

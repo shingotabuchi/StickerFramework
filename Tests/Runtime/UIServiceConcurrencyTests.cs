@@ -294,6 +294,22 @@ namespace StickerFwk.Tests.Runtime
                 "failed hide should leave the handle owned by the tracked window");
         }
 
+        [Test]
+        public async Task PushRestoresPrefabAlphaBeforeShowTransition()
+        {
+            var prefab = MakePrefab<TestWindowViewA>(UILayer.Wipe);
+            prefab.GetComponent<CanvasGroup>().alpha = 1f;
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/TestWindowViewA.prefab", prefab);
+            var service = NewService(requester);
+            var show = new AlphaObservingTransition();
+
+            var view = await service.Push<TestWindowViewA>(options: NewOptions(show)).AsTask();
+
+            Assert.That(show.AlphaAtPlay, Is.EqualTo(1f));
+            Assert.That(view.CanvasGroup.alpha, Is.EqualTo(1f));
+        }
+
         // ---------- Helpers ----------
 
         UIService NewService(FakeAssetRequester requester)
@@ -401,6 +417,17 @@ namespace StickerFwk.Tests.Runtime
             public UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
             {
                 return UniTask.FromException(new InvalidOperationException("hide failed"));
+            }
+        }
+
+        sealed class AlphaObservingTransition : ITransition
+        {
+            public float AlphaAtPlay { get; private set; }
+
+            public UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
+            {
+                AlphaAtPlay = view.CanvasGroup.alpha;
+                return UniTask.CompletedTask;
             }
         }
 

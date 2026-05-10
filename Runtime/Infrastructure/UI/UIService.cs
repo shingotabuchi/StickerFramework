@@ -48,8 +48,26 @@ namespace StickerFwk.Infrastructure.UI
             ICameraService cameraService,
             ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
+            IPublisher<WindowClosedEvent> windowClosedPublisher)
+            : this(
+                assetRequester,
+                resolver,
+                cameraService,
+                cameraRegisteredSubscriber,
+                windowOpenedPublisher,
+                windowClosedPublisher,
+                resolver?.ResolveOrDefault<WindowAssetKeyOptions>())
+        {
+        }
+
+        public UIService(
+            IAssetRequester assetRequester,
+            IObjectResolver resolver,
+            ICameraService cameraService,
+            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
+            IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher,
-            WindowAssetKeyOptions keyOptions = null)
+            WindowAssetKeyOptions keyOptions)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
@@ -478,13 +496,15 @@ namespace StickerFwk.Infrastructure.UI
                 // the OnInitialize await — the InputBlocker shields lower views, but without
                 // this the new window's own controls would still hit-test.
                 var preShowCanvasGroup = instance.GetComponent<CanvasGroup>();
+                var originalAlpha = 1f;
                 var originalBlocksRaycasts = false;
                 var originalInteractable = false;
                 if (preShowCanvasGroup != null)
                 {
                     // Snapshot the prefab-authored raycast/interactable values so we can restore
-                    // them after OnInitialize. Forcing them back to true unconditionally would
-                    // overwrite a deliberately-disabled CanvasGroup on the prefab.
+                    // them after OnInitialize. Forcing them back unconditionally would overwrite
+                    // deliberately-authored CanvasGroup values on the prefab.
+                    originalAlpha = preShowCanvasGroup.alpha;
                     originalBlocksRaycasts = preShowCanvasGroup.blocksRaycasts;
                     originalInteractable = preShowCanvasGroup.interactable;
                     preShowCanvasGroup.alpha = 0f;
@@ -524,9 +544,13 @@ namespace StickerFwk.Infrastructure.UI
                 stack.Push(windowHandle);
 
                 // Restore raycast/interactable to the prefab-authored values now that init is
-                // done; transitions only manage alpha.
+                // done. Restore alpha too so transitions that animate something other than the
+                // root CanvasGroup (e.g. Timeline-driven sprite wipes) are visible by default.
+                // Alpha-owning transitions such as Fade/Scale immediately set their own start
+                // value at the beginning of Play.
                 if (preShowCanvasGroup != null)
                 {
+                    preShowCanvasGroup.alpha = originalAlpha;
                     preShowCanvasGroup.blocksRaycasts = originalBlocksRaycasts;
                     preShowCanvasGroup.interactable = originalInteractable;
                 }

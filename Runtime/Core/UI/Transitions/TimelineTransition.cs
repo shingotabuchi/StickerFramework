@@ -14,6 +14,11 @@ namespace StickerFwk.Core.UI
 
         public async UniTask Play(WindowView view, bool isShow, float duration, CancellationToken ct)
         {
+            if (isShow)
+            {
+                view.CanvasGroup.alpha = 1f;
+            }
+
             var director = isShow ? _showDirector : _hideDirector;
             if (director == null)
             {

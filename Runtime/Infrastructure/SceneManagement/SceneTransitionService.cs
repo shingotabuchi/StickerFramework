@@ -29,10 +29,12 @@ namespace StickerFwk.Infrastructure.SceneManagement
             Func<CancellationToken, UniTask> beforeLoad = null,
             CancellationToken ct = default)
         {
+            UnityEngine.Debug.Log($"[FadeDbg] SceneTransitionService.TransitionToSceneAsync ENTER scene='{sceneName}' tag='{transitionViewTag}' ctCancelled={ct.IsCancellationRequested}");
             using var _ = _inputLockService.Lock();
 
             await _screenTransitionService.ExecuteAsync(async innerCt =>
             {
+                UnityEngine.Debug.Log($"[FadeDbg] SceneTransitionService action START scene='{sceneName}' innerCtCancelled={innerCt.IsCancellationRequested}");
                 if (beforeLoad != null)
                 {
                     await beforeLoad(innerCt);
@@ -41,10 +43,13 @@ namespace StickerFwk.Infrastructure.SceneManagement
                 _sceneReadyNotifier.Reset();
                 await SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single)
                     .ToUniTask(cancellationToken: innerCt);
+                UnityEngine.Debug.Log($"[FadeDbg] SceneTransitionService SceneLoadAsync DONE scene='{sceneName}' innerCtCancelled={innerCt.IsCancellationRequested}");
                 await _sceneReadyNotifier.WaitForReady(innerCt);
+                UnityEngine.Debug.Log($"[FadeDbg] SceneTransitionService SceneReady scene='{sceneName}' innerCtCancelled={innerCt.IsCancellationRequested}");
             },
             transitionViewTag,
             ct);
+            UnityEngine.Debug.Log($"[FadeDbg] SceneTransitionService.TransitionToSceneAsync EXIT scene='{sceneName}'");
         }
     }
 }

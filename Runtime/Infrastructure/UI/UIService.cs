@@ -217,6 +217,7 @@ namespace StickerFwk.Infrastructure.UI
 
         public async UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
         {
+            UnityEngine.Debug.Log($"[FadeDbg] UIService.Pop<{typeof(T).Name}> enter ctCancelled={ct.IsCancellationRequested}");
             ThrowIfDisposed();
             using var linkedCts = LinkToken(ct);
             var linkedCt = linkedCts.Token;
@@ -228,9 +229,11 @@ namespace StickerFwk.Infrastructure.UI
             {
                 if (!TryFindLayerOf<T>(out var layer, out var view))
                 {
+                    UnityEngine.Debug.LogWarning($"[FadeDbg] UIService.Pop<{typeof(T).Name}> NO WINDOW FOUND");
                     Log.Warning("UIService", $"No window of type {typeof(T).Name} found to pop");
                     return false;
                 }
+                UnityEngine.Debug.Log($"[FadeDbg] UIService.Pop<{typeof(T).Name}> found view='{view?.name}' layer={layer}");
 
                 var layerLock = _layerLocks[layer];
                 await layerLock.WaitAsync(linkedCt);
@@ -650,7 +653,7 @@ namespace StickerFwk.Infrastructure.UI
             }
 
             var windowHandle = stack.Pop();
-            Log.Info("FadeDbg", $"PopLocked layer={layer} key='{windowHandle.Key}' hideTrans='{windowHandle.HideTransition?.GetType().Name ?? "null"}' duration={windowHandle.TransitionDuration} ctCancelled={ct.IsCancellationRequested}");
+            UnityEngine.Debug.Log($"[FadeDbg] " + $"PopLocked layer={layer} key='{windowHandle.Key}' hideTrans='{windowHandle.HideTransition?.GetType().Name ?? "null"}' duration={windowHandle.TransitionDuration} ctCancelled={ct.IsCancellationRequested}");
             await _windowLifecycleRunner.Hide(windowHandle.View, windowHandle.HideTransition, windowHandle.TransitionDuration, ct);
 
             var key = windowHandle.Key;
@@ -725,11 +728,11 @@ namespace StickerFwk.Infrastructure.UI
 
             if (ReferenceEquals(stack.Peek(), target))
             {
-                Log.Info("FadeDbg", $"PopViewLocked top-of-stack path layer={layer} immediate={immediate} key='{target.Key}'");
+                UnityEngine.Debug.Log($"[FadeDbg] " + $"PopViewLocked top-of-stack path layer={layer} immediate={immediate} key='{target.Key}'");
                 return immediate ? PopImmediateLocked(layer) : await PopLocked(layer, ct);
             }
 
-            Log.Warning("FadeDbg", $"PopViewLocked buried path (no transition) layer={layer} key='{target.Key}'");
+            UnityEngine.Debug.LogWarning($"[FadeDbg] " + $"PopViewLocked buried path (no transition) layer={layer} key='{target.Key}'");
 
             // Buried in the stack: remove without playing a hide transition (it isn't
             // visible) but still fire lifecycle hooks and publish the closed event so

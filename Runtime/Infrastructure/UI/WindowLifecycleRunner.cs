@@ -29,7 +29,7 @@ namespace StickerFwk.Infrastructure.UI
             float transitionDuration,
             CancellationToken ct)
         {
-            StickerFwk.Core.Log.Info("WindowLifecycleRunner", $"Hide enter view='{view?.name ?? "null"}' trans='{transition?.GetType().Name ?? "null"}' duration={transitionDuration} ctCancelled={ct.IsCancellationRequested}");
+            StickerFwk.Core.Log.Info("FadeDbg", $"Hide enter view='{view?.name ?? "null"}' trans='{transition?.GetType().Name ?? "null"}' duration={transitionDuration} ctCancelled={ct.IsCancellationRequested}");
             view.OnBeforeHide();
             if (transition == null)
             {
@@ -42,16 +42,16 @@ namespace StickerFwk.Infrastructure.UI
             }
             catch (OperationCanceledException)
             {
-                StickerFwk.Core.Log.Warning("WindowLifecycleRunner", $"Hide cancelled view='{view?.name ?? "null"}'");
+                StickerFwk.Core.Log.Warning("FadeDbg", $"Hide cancelled view='{view?.name ?? "null"}'");
                 throw;
             }
             view.OnHide();
-            StickerFwk.Core.Log.Info("WindowLifecycleRunner", $"Hide exit view='{view?.name ?? "null"}'");
+            StickerFwk.Core.Log.Info("FadeDbg", $"Hide exit view='{view?.name ?? "null"}'");
         }
 
         public void HideWithoutTransition(WindowView view)
         {
-            StickerFwk.Core.Log.Warning("WindowLifecycleRunner", $"HideWithoutTransition view='{view?.name ?? "null"}'");
+            StickerFwk.Core.Log.Warning("FadeDbg", $"HideWithoutTransition view='{view?.name ?? "null"}'");
             view.OnBeforeHide();
             view.OnHide();
         }

@@ -15,12 +15,12 @@ namespace StickerFwk.Core.UI
             var startAlpha = isShow ? 0f : 1f;
             var endAlpha = isShow ? 1f : 0f;
             canvasGroup.alpha = startAlpha;
-            Log.Info("FadeTransition", $"Play start view='{view.name}' isShow={isShow} duration={duration} startAlpha={startAlpha} endAlpha={endAlpha} canvasEnabled={(canvasGroup.GetComponentInParent<Canvas>()?.enabled.ToString() ?? "null")} ctCancelled={ct.IsCancellationRequested}");
+            Log.Info("FadeDbg", $"Fade.start view='{view.name}' isShow={isShow} duration={duration} startAlpha={startAlpha} endAlpha={endAlpha} canvasEnabled={(canvasGroup.GetComponentInParent<Canvas>()?.enabled.ToString() ?? "null")} ctCancelled={ct.IsCancellationRequested}");
 
             if (duration <= 0f)
             {
                 canvasGroup.alpha = endAlpha;
-                Log.Info("FadeTransition", $"Play short-circuit (duration<=0) view='{view.name}' isShow={isShow}");
+                Log.Info("FadeDbg", $"Fade.short-circuit (duration<=0) view='{view.name}' isShow={isShow}");
                 return;
             }
 
@@ -42,7 +42,7 @@ namespace StickerFwk.Core.UI
             }
 
             canvasGroup.alpha = endAlpha;
-            Log.Info("FadeTransition", $"Play complete view='{view.name}' isShow={isShow} iterations={iterations} elapsed={elapsed}");
+            Log.Info("FadeDbg", $"Fade.complete view='{view.name}' isShow={isShow} iterations={iterations} elapsed={elapsed}");
         }
     }
 }

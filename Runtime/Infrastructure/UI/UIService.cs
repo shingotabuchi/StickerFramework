@@ -650,7 +650,7 @@ namespace StickerFwk.Infrastructure.UI
             }
 
             var windowHandle = stack.Pop();
-            Log.Info("UIService", $"PopLocked layer={layer} key='{windowHandle.Key}' hideTrans='{windowHandle.HideTransition?.GetType().Name ?? "null"}' duration={windowHandle.TransitionDuration} ctCancelled={ct.IsCancellationRequested}");
+            Log.Info("FadeDbg", $"PopLocked layer={layer} key='{windowHandle.Key}' hideTrans='{windowHandle.HideTransition?.GetType().Name ?? "null"}' duration={windowHandle.TransitionDuration} ctCancelled={ct.IsCancellationRequested}");
             await _windowLifecycleRunner.Hide(windowHandle.View, windowHandle.HideTransition, windowHandle.TransitionDuration, ct);
 
             var key = windowHandle.Key;
@@ -725,11 +725,11 @@ namespace StickerFwk.Infrastructure.UI
 
             if (ReferenceEquals(stack.Peek(), target))
             {
-                Log.Info("UIService", $"PopViewLocked top-of-stack path layer={layer} immediate={immediate} key='{target.Key}'");
+                Log.Info("FadeDbg", $"PopViewLocked top-of-stack path layer={layer} immediate={immediate} key='{target.Key}'");
                 return immediate ? PopImmediateLocked(layer) : await PopLocked(layer, ct);
             }
 
-            Log.Warning("UIService", $"PopViewLocked buried path (no transition) layer={layer} key='{target.Key}'");
+            Log.Warning("FadeDbg", $"PopViewLocked buried path (no transition) layer={layer} key='{target.Key}'");
 
             // Buried in the stack: remove without playing a hide transition (it isn't
             // visible) but still fire lifecycle hooks and publish the closed event so

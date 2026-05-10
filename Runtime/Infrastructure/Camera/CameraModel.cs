@@ -10,7 +10,13 @@ namespace StickerFwk.Infrastructure.Camera
 
         public bool Register(CameraId id, UnityEngine.Camera camera)
         {
-            return _cameras.TryAdd(id, camera);
+            if (_cameras.TryGetValue(id, out var existing) && ReferenceEquals(existing, camera))
+            {
+                return false;
+            }
+
+            _cameras[id] = camera;
+            return true;
         }
 
         public bool Unregister(CameraId id)

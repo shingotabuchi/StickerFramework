@@ -24,7 +24,6 @@ namespace StickerFwk.Infrastructure.Camera
 
             if (!_model.Register(id, camera))
             {
-                Log.Warning($"[CameraService] Camera '{id}' is already registered.");
                 return;
             }
 

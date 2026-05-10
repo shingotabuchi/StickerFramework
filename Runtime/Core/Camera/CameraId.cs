@@ -8,5 +8,7 @@ namespace StickerFwk.Core
         WorldOverlay = 30,
         UIOverlay = 40,
         Wipe = 50,
+        Game = 100,
+        BirdsEye = 200,
     }
 }

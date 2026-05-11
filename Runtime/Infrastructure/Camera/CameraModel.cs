@@ -50,7 +50,7 @@ namespace StickerFwk.Infrastructure.Camera
             return _kinds.TryGetValue(id, out kind);
         }
 
-        public IReadOnlyCollection<CameraId> GetRegisteredIds()
+        public IReadOnlyList<CameraId> GetRegisteredIds()
         {
             return new List<CameraId>(_registered.Keys);
         }

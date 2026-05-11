@@ -39,6 +39,7 @@ namespace StickerFwk.Core.UI
 
         sealed class PopState
         {
+            // Shared by struct copies so repeated Pop calls remain idempotent.
             public int Popped;
         }
     }

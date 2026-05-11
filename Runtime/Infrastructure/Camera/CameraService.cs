@@ -74,6 +74,11 @@ namespace StickerFwk.Infrastructure.Camera
             return _model.TryGet(id, out camera);
         }
 
+        public UnityEngine.Camera GetCamera(CameraId id)
+        {
+            return _model.TryGet(id, out var camera) ? camera : null;
+        }
+
         public UnityEngine.Camera GetRequiredCamera(CameraId id)
         {
             if (!_model.TryGet(id, out var camera) || camera == null)
@@ -84,7 +89,31 @@ namespace StickerFwk.Infrastructure.Camera
             return camera;
         }
 
-        public IReadOnlyCollection<CameraId> GetRegisteredIds()
+        public UnityEngine.Camera GetCameraForRenderer(Renderer renderer)
+        {
+            if (renderer == null)
+            {
+                return null;
+            }
+
+            foreach (var kvp in _model.Registered)
+            {
+                var camera = kvp.Value;
+                if (camera == null || !camera.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                if ((camera.cullingMask & (1 << renderer.gameObject.layer)) != 0)
+                {
+                    return camera;
+                }
+            }
+
+            return null;
+        }
+
+        public IReadOnlyList<CameraId> GetRegisteredIds()
         {
             return _model.GetRegisteredIds();
         }

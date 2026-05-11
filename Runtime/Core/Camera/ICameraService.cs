@@ -9,10 +9,12 @@ namespace StickerFwk.Core
         // Registration
         void Register(CameraId id, Camera camera);
         void Unregister(CameraId id);
+        Camera GetCamera(CameraId id);
         bool TryGetCamera(CameraId id, out Camera camera);
         Camera GetRequiredCamera(CameraId id);
+        Camera GetCameraForRenderer(Renderer renderer);
         bool IsRegistered(CameraId id);
-        IReadOnlyCollection<CameraId> GetRegisteredIds();
+        IReadOnlyList<CameraId> GetRegisteredIds();
 
         // Base-swap stack
         CameraId ActiveBase { get; }

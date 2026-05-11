@@ -365,9 +365,11 @@ namespace StickerFwk.Tests.Runtime
             public void Register(CameraId id, Camera camera) { }
             public void Unregister(CameraId id) { }
             public bool IsRegistered(CameraId id) => true;
+            public Camera GetCamera(CameraId id) => _camera;
             public bool TryGetCamera(CameraId id, out Camera camera) { camera = _camera; return _camera != null; }
             public Camera GetRequiredCamera(CameraId id) => _camera;
-            public IReadOnlyCollection<CameraId> GetRegisteredIds() => Array.Empty<CameraId>();
+            public Camera GetCameraForRenderer(Renderer renderer) => _camera;
+            public IReadOnlyList<CameraId> GetRegisteredIds() => Array.Empty<CameraId>();
             public CameraId ActiveBase => default;
             public event Action<ActiveBaseChangedEvent> ActiveBaseChanged { add { } remove { } }
             public void SetDefaultBase(CameraId id) { }

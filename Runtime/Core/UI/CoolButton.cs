@@ -112,11 +112,13 @@ namespace StickerFwk.Core.UI
             private static IObjectResolver _resolver;
             private static object _soundService;
             private static bool _isInitialized;
+            private static bool _searchedLifetimeScopes;
 
             public static void SetResolver(IObjectResolver resolver)
             {
                 _resolver = resolver;
                 _soundService = null;
+                _searchedLifetimeScopes = false;
             }
 
             public static bool TryPlay(string soundName)
@@ -137,6 +139,7 @@ namespace StickerFwk.Core.UI
                 {
                     Debug.LogWarning($"[CoolButton] Click SFX '{soundName}' failed: {ex.InnerException?.Message ?? ex.Message}");
                     _soundService = null;
+                    _searchedLifetimeScopes = false;
                     return false;
                 }
             }
@@ -181,6 +184,12 @@ namespace StickerFwk.Core.UI
                     return _soundService;
                 }
 
+                if (_searchedLifetimeScopes)
+                {
+                    return null;
+                }
+
+                _searchedLifetimeScopes = true;
                 foreach (var scope in UnityEngine.Object.FindObjectsByType<LifetimeScope>())
                 {
                     if (scope == null || scope.Container == null)

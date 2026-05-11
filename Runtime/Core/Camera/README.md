@@ -53,14 +53,25 @@ The same `CameraId` may have a different URP render type in different scenes. Fo
 
 ## Service
 
+### Migration note
+
+The old profile API (`ICameraProfileService`, `CameraProfile`,
+`CameraProfileId`, `CameraSystemSettings`) was replaced by scene camera
+registration plus a Base/Overlay stack. Register each scene camera with a
+stable `CameraId`, select default or temporary Base cameras with
+`SetDefaultBase` / `PushBase`, and suppress Overlay cameras with
+`DisableOverlay`.
+
 ### `ICameraService`
 
 ```csharp
 void Register(CameraId id, Camera camera);
 void Unregister(CameraId id);
+Camera GetCamera(CameraId id);
 bool TryGetCamera(CameraId id, out Camera camera);
 Camera GetRequiredCamera(CameraId id);
-IReadOnlyCollection<CameraId> GetRegisteredIds();
+Camera GetCameraForRenderer(Renderer renderer);
+IReadOnlyList<CameraId> GetRegisteredIds();
 
 CameraId ActiveBase { get; }
 event Action<ActiveBaseChangedEvent> ActiveBaseChanged;

@@ -266,6 +266,7 @@ Registers feature-specific types. Inherits from parent (Root) scope to access gl
 
 ```csharp
 using MessagePipe;
+using StickerFwk.Core;
 using VContainer;
 using VContainer.Unity;
 
@@ -275,6 +276,8 @@ namespace App.Features.Plinko
     {
         protected override void Configure(IContainerBuilder builder)
         {
+            builder.UseScopeCancellation(this);
+
             // Model (singleton within this feature scope)
             builder.Register<PlinkoModel>(Lifetime.Scoped);
 
@@ -289,6 +292,11 @@ namespace App.Features.Plinko
     }
 }
 ```
+
+`UseScopeCancellation(this)` registers `IScopeCancellation`, a scope-bound token
+for presenters/services. Use `IScopeCancellation.Token` for fire-and-forget
+operations tied to scene lifetime, and `CreateLinked()` for restartable loops
+that should cancel on either manual stop or scope teardown.
 
 **Scene setup:** Attach this LifetimeScope to a GameObject in your scene. Set `Parent` to the Root LifetimeScope (either via Inspector reference or `autoRun` with `parentReference`).
 

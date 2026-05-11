@@ -12,6 +12,7 @@ namespace StickerFwk.Infrastructure.UI
     {
         readonly ICameraService _cameraService;
         readonly ISubscriber<CameraRegisteredEvent> _cameraRegisteredSubscriber;
+        readonly UICanvasOptions _canvasOptions;
         readonly Dictionary<UILayer, Canvas> _layerCanvases = new Dictionary<UILayer, Canvas>();
         IDisposable _cameraSubscription;
         GameObject _root;
@@ -19,10 +20,12 @@ namespace StickerFwk.Infrastructure.UI
 
         public UILayerManager(
             ICameraService cameraService,
-            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber)
+            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
+            UICanvasOptions canvasOptions = null)
         {
             _cameraService = cameraService;
             _cameraRegisteredSubscriber = cameraRegisteredSubscriber;
+            _canvasOptions = canvasOptions ?? new UICanvasOptions();
         }
 
         public static CameraId LayerToCameraId(UILayer layer)
@@ -146,12 +149,21 @@ namespace StickerFwk.Infrastructure.UI
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
             canvas.sortingOrder = (int)layer;
+            canvas.planeDistance = _canvasOptions.PlaneDistance;
+            canvas.pixelPerfect = _canvasOptions.PixelPerfect;
+            canvas.additionalShaderChannels = _canvasOptions.AdditionalShaderChannels;
             canvas.enabled = false;
+            _canvasOptions.ConfigureCanvas?.Invoke(layer, canvas);
 
             var scaler = go.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.uiScaleMode = _canvasOptions.UiScaleMode;
+            scaler.referenceResolution = _canvasOptions.ReferenceResolution;
+            scaler.screenMatchMode = _canvasOptions.ScreenMatchMode;
+            scaler.matchWidthOrHeight = _canvasOptions.MatchWidthOrHeight;
+            scaler.referencePixelsPerUnit = _canvasOptions.ReferencePixelsPerUnit;
+            scaler.scaleFactor = _canvasOptions.ScaleFactor;
+            scaler.dynamicPixelsPerUnit = _canvasOptions.DynamicPixelsPerUnit;
+            _canvasOptions.ConfigureScaler?.Invoke(layer, scaler);
 
             go.AddComponent<GraphicRaycaster>();
 

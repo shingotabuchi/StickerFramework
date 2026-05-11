@@ -19,34 +19,38 @@ In your root `LifetimeScope.Configure(IContainerBuilder builder)`:
 
 ```csharp
 #if STICKER_DEBUG
-builder.UseDebugMenu();                    // uses DebugMenuSettings.Default
+builder.UseDebugMenu();                    // uses the project asset, or DebugMenuSettings.Default
 // or
-builder.UseDebugMenu(new DebugMenuSettings(...));
+builder.UseDebugMenu(debugMenuSettings);  // explicit asset
 #endif
 ```
 
 This:
 - Spawns a `DontDestroyOnLoad` GameObject with `DebugMenuService` (an IMGUI overlay).
+- Adds a transparent UGUI raycast blocker over the debug button / panel so clicks do not pass
+  through to gameplay UI underneath.
 - Registers the built-in `LogsDebugPage`.
 - Force-resolves the service so the corner toggle button (labelled "Debug") is visible immediately.
 
 ### Customizing layout
 
 `DebugMenuSettings` is a `ScriptableObject` configuring everything visual: toggle-button corner /
-size / text / margin, panel width / margin / height, UI scale, font sizes, widget height,
-label column width, and panel colors (`PanelBackgroundColor`, `SeparatorColor`). Color tweaks
-are picked up live during Play without a domain reload.
+size / text / margin / color, panel corner / width / margin / height, UI scale, font sizes, widget
+height, toggle size, slider size, slider handle/gauge size ratios, scrollbar width, label column
+width, text/outline colors and thickness, and panel/slider colors. These tweaks are picked up live
+during Play without a domain reload.
 
 Create one via **Assets → Create → Sticker → Framework → Debug Menu Settings**, edit it in the
-inspector, then drag it onto the **Debug Menu Settings** field of your root `LifetimeScope`. The
-Sticker project ships with `Assets/Settings/DebugMenuSettings.asset` already wired to
-`RootLifetimeScope.prefab`.
+inspector, then pass it to `UseDebugMenu(settings)` if you do not want to use the project-level
+asset. The Sticker project ships with `Assets/Resources/Sticker/DebugMenuSettings.asset`, which is
+loaded automatically by `UseDebugMenu()` and included in debug players via `Resources`.
 
 You can also edit it from **Edit → Project Settings → Sticker → Debug Menu** — the provider
-loads (or creates) the asset at `Assets/Settings/DebugMenuSettings.asset` and edits it in place.
+loads (or creates) the asset at `Assets/Resources/Sticker/DebugMenuSettings.asset` and edits it in
+place.
 
-If no asset is assigned, `UseDebugMenu(...)` falls back to `DebugMenuSettings.Default` (an
-in-memory instance with sensible built-in values).
+If no asset is assigned and the project-level asset is missing, `UseDebugMenu(...)` falls back to
+`DebugMenuSettings.Default` (an in-memory instance with sensible built-in values).
 
 ## Adding a page
 
@@ -108,7 +112,9 @@ fields and are re-read on every render.
 ## Navigation
 
 The menu is a stack of pages, like phone settings:
-- The implicit root page lists all registered `IDebugPage`s as `PageLink`s, sorted by `Order` then `Title`.
+- The implicit root page first renders root contributions from pages that implement
+  `IDebugRootPageContributor`, then lists all registered `IDebugPage`s as `PageLink`s,
+  sorted by `Order` then `Title`.
 - Tapping a `PageLink` pushes; the title bar's **◀ Back** pops. Back is disabled at the root.
 - **✕** closes the menu and persists the current top-of-stack page id to `PlayerPrefs`
   (`StickerFwk.DebugMenu.LastPageId`). On the next open, that page is restored if still registered.

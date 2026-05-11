@@ -1,6 +1,7 @@
 #if STICKER_DEBUG
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using VContainer;
 
 namespace StickerFwk.Core.Debug
@@ -19,16 +20,26 @@ namespace StickerFwk.Core.Debug
     public sealed class DebugMenuService : MonoBehaviour, IDebugMenuService
     {
         private const string LastPageIdKey = "StickerFwk.DebugMenu.LastPageId";
+        private const int RaycastBlockerSortingOrder = short.MaxValue;
+        private const float ScrollDragThreshold = 6f;
 
         private readonly DebugMenuStyles _styles = new DebugMenuStyles();
         private readonly Stack<IDebugPage> _stack = new Stack<IDebugPage>();
         private readonly Dictionary<IDebugPage, List<DebugWidget>> _widgetsByPage = new Dictionary<IDebugPage, List<DebugWidget>>();
 
+        private GameObject _raycastBlockerCanvas;
+        private RectTransform _raycastBlockerRect;
         private DebugMenuSettings _settings;
         private List<IDebugPage> _registeredPages;
         private RootDebugPage _rootPage;
         private bool _isOpen;
+        private int _keepPanelRaycastBlockerFrame = -1;
         private Vector2 _scrollPosition;
+        private bool _scrollDragCandidate;
+        private bool _scrollDragActive;
+        private int _scrollDragControlId;
+        private Vector2 _scrollDragStartMouse;
+        private Vector2 _scrollDragStartPosition;
         private DebugMenuRenderContext _ctx;
 
         public bool IsOpen => _isOpen;
@@ -93,6 +104,8 @@ namespace StickerFwk.Core.Debug
         private void Start()
         {
             _ctx = new DebugMenuRenderContext(_styles, this);
+            EnsureRaycastBlocker();
+            UpdateRaycastBlocker();
 
             // Restore the last-open page (one level deep only — multi-level paths aren't persisted).
             var lastId = PlayerPrefs.GetString(LastPageIdKey, string.Empty);
@@ -109,6 +122,11 @@ namespace StickerFwk.Core.Debug
             _stack.Push(_rootPage);
         }
 
+        private void LateUpdate()
+        {
+            UpdateRaycastBlocker();
+        }
+
         public void Open()
         {
             if (_isOpen)
@@ -116,6 +134,7 @@ namespace StickerFwk.Core.Debug
                 return;
             }
             _isOpen = true;
+            ResetScroll();
         }
 
         public void Close()
@@ -125,6 +144,8 @@ namespace StickerFwk.Core.Debug
                 return;
             }
             _isOpen = false;
+            _keepPanelRaycastBlockerFrame = Time.frameCount;
+            ResetScrollDrag();
             SaveLastPage();
         }
 
@@ -147,6 +168,7 @@ namespace StickerFwk.Core.Debug
                 return;
             }
             _stack.Push(page);
+            ResetScroll();
         }
 
         public void Pop()
@@ -155,6 +177,7 @@ namespace StickerFwk.Core.Debug
             if (_stack.Count > 1)
             {
                 _stack.Pop();
+                ResetScroll();
             }
         }
 
@@ -164,6 +187,7 @@ namespace StickerFwk.Core.Debug
             {
                 _stack.Pop();
             }
+            ResetScroll();
         }
 
         private void OnGUI()
@@ -173,12 +197,7 @@ namespace StickerFwk.Core.Debug
             // Effective scale = uiScale × (screenHeight / referenceScreenHeight) so the menu
             // grows on larger displays and shrinks on smaller ones. ReferenceScreenHeight <= 0
             // disables screen-relative scaling.
-            var scale = _settings.UiScale;
-            var refH = _settings.ReferenceScreenHeight;
-            if (refH > 0f)
-            {
-                scale *= Screen.height / refH;
-            }
+            var scale = GetCurrentScale();
             var previousMatrix = GUI.matrix;
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
 
@@ -196,13 +215,257 @@ namespace StickerFwk.Core.Debug
 
         private void DrawToggleButton(float scale)
         {
-            var safeArea = GetScaledSafeArea(scale);
-            var width = _settings.ButtonWidth;
-            var height = _settings.ButtonHeight;
-            var margin = _settings.ButtonMargin;
+            if (!TryGetToggleButtonRect(scale, out var rect))
+            {
+                return;
+            }
 
+            if (GUI.Button(rect, GUIContent.none, _styles.ToggleButton))
+            {
+                Open();
+            }
+            _styles.DrawOutlinedLabel(rect, _settings.ButtonText, _styles.ToggleButton);
+        }
+
+        private void DrawPanel(float scale)
+        {
+            if (!TryGetPanelRect(scale, out var rect))
+            {
+                return;
+            }
+
+            GUILayout.BeginArea(rect, _styles.Window);
+
+            var current = _stack.Count > 0 ? _stack.Peek() : _rootPage;
+
+            // Title bar: Back (disabled at root) | title | Close.
+            var titleButtonHeight = Mathf.Min(Mathf.Max(28f, _settings.WidgetHeight), rect.height);
+            var sideButtonMaxWidth = Mathf.Max(1f, Mathf.Min(Mathf.Max(32f, rect.width * 0.35f), rect.width * 0.5f));
+            var backButtonWidth = Mathf.Min(Mathf.Max(80f, _settings.LabelWidth * 0.6f), sideButtonMaxWidth);
+            var closeButtonWidth = Mathf.Min(Mathf.Max(40f, titleButtonHeight), sideButtonMaxWidth);
+            var sideSlotWidth = Mathf.Max(backButtonWidth, closeButtonWidth);
+
+            var titleRowRect = GUILayoutUtility.GetRect(
+                0f,
+                titleButtonHeight,
+                GUILayout.ExpandWidth(true),
+                GUILayout.Height(titleButtonHeight));
+            var titleRect = new Rect(
+                titleRowRect.xMin + sideSlotWidth,
+                titleRowRect.yMin,
+                Mathf.Max(0f, titleRowRect.width - sideSlotWidth * 2f),
+                titleButtonHeight);
+            var backRect = new Rect(titleRowRect.xMin, titleRowRect.yMin, backButtonWidth, titleButtonHeight);
+            var closeRect = new Rect(titleRowRect.xMax - closeButtonWidth, titleRowRect.yMin, closeButtonWidth, titleButtonHeight);
+
+            GUI.enabled = _stack.Count > 1;
+            if (GUI.Button(backRect, GUIContent.none, _styles.SmallButton))
+            {
+                Pop();
+            }
+            _styles.DrawOutlinedLabel(backRect, "◀ Back", _styles.SmallButton);
+            GUI.enabled = true;
+            _styles.DrawOutlinedLabel(titleRect, current.Title, _styles.TitleLabel);
+
+            if (GUI.Button(closeRect, GUIContent.none, _styles.SmallButton))
+            {
+                Close();
+                GUILayout.EndArea();
+                return;
+            }
+            _styles.DrawOutlinedLabel(closeRect, "✕", _styles.SmallButton);
+
+            GUILayout.Space(6f);
+
+            var scrollHeight = Mathf.Max(0f, rect.height - _styles.Window.padding.vertical - titleButtonHeight - 6f);
+            var scrollRect = new Rect(
+                titleRowRect.xMin,
+                titleRowRect.yMax + 6f,
+                titleRowRect.width,
+                scrollHeight);
+            var contentDragRect = scrollRect;
+            contentDragRect.width = Mathf.Max(0f, contentDragRect.width - _styles.ScrollBarWidth);
+            HandleScrollDrag(contentDragRect);
+
+            var previousSkin = GUI.skin;
+            if (_styles.ScrollViewSkin != null)
+            {
+                GUI.skin = _styles.ScrollViewSkin;
+            }
+
+            try
+            {
+                _scrollPosition = GUILayout.BeginScrollView(
+                    _scrollPosition,
+                    false,
+                    true,
+                    _styles.HorizontalScrollbar,
+                    _styles.VerticalScrollbar,
+                    GUILayout.ExpandWidth(true),
+                    GUILayout.Height(scrollHeight));
+                var widgets = GetWidgets(current);
+                for (var i = 0; i < widgets.Count; i++)
+                {
+                    widgets[i].Render(_ctx);
+                }
+                GUILayout.EndScrollView();
+            }
+            finally
+            {
+                GUI.skin = previousSkin;
+            }
+
+            GUILayout.EndArea();
+        }
+
+        private void HandleScrollDrag(Rect contentDragRect)
+        {
+            var evt = Event.current;
+            if (evt == null)
+            {
+                return;
+            }
+
+            var controlId = GUIUtility.GetControlID(FocusType.Passive, contentDragRect);
+            switch (evt.type)
+            {
+                case EventType.MouseDown:
+                    if (evt.button != 0)
+                    {
+                        break;
+                    }
+
+                    if (!contentDragRect.Contains(evt.mousePosition))
+                    {
+                        ResetScrollDrag();
+                        break;
+                    }
+
+                    _scrollDragCandidate = true;
+                    _scrollDragActive = false;
+                    _scrollDragControlId = controlId;
+                    _scrollDragStartMouse = evt.mousePosition;
+                    _scrollDragStartPosition = _scrollPosition;
+                    break;
+
+                case EventType.MouseDrag:
+                    if (!_scrollDragCandidate)
+                    {
+                        break;
+                    }
+
+                    var delta = evt.mousePosition - _scrollDragStartMouse;
+                    if (!_scrollDragActive)
+                    {
+                        if (delta.magnitude < ScrollDragThreshold)
+                        {
+                            break;
+                        }
+
+                        if (Mathf.Abs(delta.y) < Mathf.Abs(delta.x))
+                        {
+                            ResetScrollDrag();
+                            break;
+                        }
+
+                        _scrollDragActive = true;
+                        GUIUtility.hotControl = _scrollDragControlId;
+                    }
+
+                    if (GUIUtility.hotControl == _scrollDragControlId)
+                    {
+                        _scrollPosition.y = Mathf.Max(0f, _scrollDragStartPosition.y - delta.y);
+                        evt.Use();
+                    }
+                    break;
+
+                case EventType.MouseUp:
+                    if (_scrollDragCandidate || _scrollDragActive)
+                    {
+                        if (GUIUtility.hotControl == _scrollDragControlId)
+                        {
+                            GUIUtility.hotControl = 0;
+                            evt.Use();
+                        }
+                        ResetScrollDrag();
+                    }
+                    break;
+            }
+        }
+
+        private void ResetScroll()
+        {
+            _scrollPosition = Vector2.zero;
+            ResetScrollDrag();
+        }
+
+        private void ResetScrollDrag()
+        {
+            if (_scrollDragActive && GUIUtility.hotControl == _scrollDragControlId)
+            {
+                GUIUtility.hotControl = 0;
+            }
+
+            _scrollDragCandidate = false;
+            _scrollDragActive = false;
+            _scrollDragControlId = 0;
+            _scrollDragStartMouse = Vector2.zero;
+            _scrollDragStartPosition = Vector2.zero;
+        }
+
+        private static float GetResponsiveMargin(float requestedMargin, Rect safeArea)
+        {
+            var maxMargin = Mathf.Max(0f, (Mathf.Min(safeArea.width, safeArea.height) - 1f) * 0.5f);
+            return Mathf.Clamp(requestedMargin, 0f, maxMargin);
+        }
+
+        private bool TryGetToggleButtonRect(float scale, out Rect rect)
+        {
+            var safeArea = GetScaledSafeArea(scale);
+            var margin = GetResponsiveMargin(_settings.ButtonMargin, safeArea);
+            var width = Mathf.Min(_settings.ButtonWidth, Mathf.Max(0f, safeArea.width - margin * 2f));
+            var height = Mathf.Min(_settings.ButtonHeight, Mathf.Max(0f, safeArea.height - margin * 2f));
+            if (width <= 0f || height <= 0f)
+            {
+                rect = default;
+                return false;
+            }
+
+            rect = GetAnchoredRect(safeArea, margin, width, height, _settings.ButtonCorner);
+            return true;
+        }
+
+        private bool TryGetPanelRect(float scale, out Rect rect)
+        {
+            var safeArea = GetScaledSafeArea(scale);
+            var margin = GetResponsiveMargin(_settings.PanelMargin, safeArea);
+            var availableWidth = Mathf.Max(0f, safeArea.width - margin * 2f);
+            var availableHeight = Mathf.Max(0f, safeArea.height - margin * 2f);
+            var width = Mathf.Min(_settings.PanelWidth, availableWidth);
+            if (_settings.PanelFillScreenHeight)
+            {
+                availableHeight = Mathf.Min(availableHeight, _settings.PanelMaxHeight);
+            }
+            else
+            {
+                availableHeight = Mathf.Min(_settings.PanelMaxHeight, availableHeight);
+            }
+
+            var height = availableHeight;
+            if (width <= 0f || height <= 0f)
+            {
+                rect = default;
+                return false;
+            }
+
+            rect = GetAnchoredRect(safeArea, margin, width, height, _settings.PanelCorner);
+            return true;
+        }
+
+        private static Rect GetAnchoredRect(Rect safeArea, float margin, float width, float height, DebugMenuButtonCorner corner)
+        {
             float x, y;
-            switch (_settings.ButtonCorner)
+            switch (corner)
             {
                 case DebugMenuButtonCorner.TopLeft:
                     x = safeArea.xMin + margin;
@@ -224,63 +487,7 @@ namespace StickerFwk.Core.Debug
 
             x = Mathf.Clamp(x, safeArea.xMin, Mathf.Max(safeArea.xMin, safeArea.xMax - width));
             y = Mathf.Clamp(y, safeArea.yMin, Mathf.Max(safeArea.yMin, safeArea.yMax - height));
-
-            if (GUI.Button(new Rect(x, y, width, height), _settings.ButtonText, _styles.ToggleButton))
-            {
-                Open();
-            }
-        }
-
-        private void DrawPanel(float scale)
-        {
-            var safeArea = GetScaledSafeArea(scale);
-            var margin = _settings.PanelMargin;
-            var maxWidth = Mathf.Max(0f, safeArea.width - margin * 2f);
-            var width = Mathf.Min(_settings.PanelWidth, maxWidth);
-            float height;
-            if (_settings.PanelFillScreenHeight)
-            {
-                height = Mathf.Min(Mathf.Max(0f, safeArea.height - margin * 2f), _settings.PanelMaxHeight);
-            }
-            else
-            {
-                height = Mathf.Min(_settings.PanelMaxHeight, Mathf.Max(0f, safeArea.height - margin * 2f));
-            }
-            var rect = new Rect(safeArea.xMin + margin, safeArea.yMin + margin, width, height);
-            GUILayout.BeginArea(rect, _styles.Window);
-
-            var current = _stack.Count > 0 ? _stack.Peek() : _rootPage;
-
-            // Title bar: Back (disabled at root) | title | Close.
-            GUILayout.BeginHorizontal();
-            GUI.enabled = _stack.Count > 1;
-            if (GUILayout.Button("◀ Back", _styles.SmallButton, GUILayout.Width(80f), GUILayout.Height(28f)))
-            {
-                Pop();
-            }
-            GUI.enabled = true;
-            GUILayout.Label(current.Title, _styles.TitleLabel, GUILayout.ExpandWidth(true));
-            if (GUILayout.Button("✕", _styles.SmallButton, GUILayout.Width(40f), GUILayout.Height(28f)))
-            {
-                Close();
-                // Bail out cleanly: the panel is gone, but we still need balanced GUILayout calls.
-                GUILayout.EndHorizontal();
-                GUILayout.EndArea();
-                return;
-            }
-            GUILayout.EndHorizontal();
-
-            GUILayout.Space(6f);
-
-            _scrollPosition = GUILayout.BeginScrollView(_scrollPosition);
-            var widgets = GetWidgets(current);
-            for (var i = 0; i < widgets.Count; i++)
-            {
-                widgets[i].Render(_ctx);
-            }
-            GUILayout.EndScrollView();
-
-            GUILayout.EndArea();
+            return new Rect(x, y, width, height);
         }
 
         private static Rect GetScaledSafeArea(float scale)
@@ -296,6 +503,68 @@ namespace StickerFwk.Core.Debug
             var safeW = safeArea.width / scale;
             var safeH = safeArea.height / scale;
             return new Rect(safeX, safeY, safeW, safeH);
+        }
+
+        private float GetCurrentScale()
+        {
+            var scale = _settings.UiScale;
+            var refH = _settings.ReferenceScreenHeight;
+            if (refH > 0f)
+            {
+                scale *= Screen.height / refH;
+            }
+            return Mathf.Max(scale, 0.0001f);
+        }
+
+        private void EnsureRaycastBlocker()
+        {
+            if (_raycastBlockerCanvas != null && _raycastBlockerRect != null)
+            {
+                return;
+            }
+
+            _raycastBlockerCanvas = new GameObject("DebugMenuRaycastBlocker", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+            _raycastBlockerCanvas.transform.SetParent(transform, false);
+
+            var canvas = _raycastBlockerCanvas.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = RaycastBlockerSortingOrder;
+
+            var blocker = new GameObject("Blocker", typeof(RectTransform), typeof(Image));
+            blocker.transform.SetParent(_raycastBlockerCanvas.transform, false);
+            _raycastBlockerRect = blocker.GetComponent<RectTransform>();
+            _raycastBlockerRect.anchorMin = new Vector2(0f, 1f);
+            _raycastBlockerRect.anchorMax = new Vector2(0f, 1f);
+            _raycastBlockerRect.pivot = new Vector2(0f, 1f);
+
+            var image = blocker.GetComponent<Image>();
+            image.color = new Color(0f, 0f, 0f, 0f);
+            image.raycastTarget = true;
+
+            _raycastBlockerCanvas.SetActive(false);
+        }
+
+        private void UpdateRaycastBlocker()
+        {
+            EnsureRaycastBlocker();
+
+            var scale = GetCurrentScale();
+            var shouldUsePanelRect = _isOpen || _keepPanelRaycastBlockerFrame == Time.frameCount;
+            Rect guiRect;
+            var hasRect = shouldUsePanelRect
+                ? TryGetPanelRect(scale, out guiRect)
+                : TryGetToggleButtonRect(scale, out guiRect);
+
+            if (!hasRect)
+            {
+                _raycastBlockerCanvas.SetActive(false);
+                return;
+            }
+
+            _raycastBlockerCanvas.SetActive(true);
+            _raycastBlockerRect.anchoredPosition = new Vector2(guiRect.x * scale, -guiRect.y * scale);
+            _raycastBlockerRect.sizeDelta = new Vector2(guiRect.width * scale, guiRect.height * scale);
         }
 
         // Widget lists are built once per page on first display and cached for the lifetime of the menu.

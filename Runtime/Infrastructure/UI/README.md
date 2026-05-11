@@ -53,12 +53,32 @@ Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Co
 
 - Windows specify which layer they belong to via the `Layer` field on `WindowView` (default `UILayer.UI`).
 - Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — place a scene-resident camera with `ManagedCamera` for that ID before pushing the window.
-- Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
+- Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match by default — override via `UICanvasOptions`), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
 - `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that replace scene-resident UI cameras).
 
 > **Why only three layers?** The framework intentionally does **not** split HUD / Window / Popup / Modal across separate `UILayer` values. Within `UI`, ordering between simultaneously open windows is determined by push order (later pushes draw above earlier ones) and child-sibling order inside a prefab; modality is controlled per-window via `WindowView.IsBlocking`. Add a new enum entry only when you need a dedicated camera/canvas pair (different post-processing, guaranteed top/bottom rendering, etc.) — not just because two windows have different gameplay roles.
 
 Need a Canvas authored in the scene (boot splash, version label, debug overlay)? Use `CanvasCameraBinder` instead — see **R11**. The `UILayer` enum is reserved for windows pushed through `IUIService`.
+
+### Canvas / CanvasScaler settings
+
+Override the defaults applied to every layer canvas by registering a `UICanvasOptions` instance in your root scope (resolved optionally by `UIService`):
+
+```csharp
+builder.RegisterInstance(new UICanvasOptions
+{
+    ReferenceResolution = new Vector2(1080f, 1920f), // portrait
+    MatchWidthOrHeight = 1f,
+    ScreenMatchMode = CanvasScaler.ScreenMatchMode.Expand,
+    // Per-layer tweaks if needed:
+    ConfigureScaler = (layer, scaler) =>
+    {
+        if (layer == UILayer.Wipe) scaler.matchWidthOrHeight = 0f;
+    }
+});
+```
+
+If no instance is registered, `UILayerManager` falls back to the framework defaults (`ScaleWithScreenSize`, 1920×1080, match 0.5).
 
 ## R4: Modal / Input Blocking
 
@@ -82,6 +102,9 @@ Need a Canvas authored in the scene (boot splash, version label, debug overlay)?
 - Transitions are async (`UniTask`-based) and support cancellation.
 - During a transition, input to the transitioning window is disabled.
 - Runtime overrides for transition and duration are supported via `WindowOptions`.
+- `IScreenTransitionService.ExecuteAsync` has a progress-aware overload. A `ScreenTransitionView`
+  can implement `IScreenTransitionProgressSink` to receive normalized `0..1` progress while
+  the covered operation runs; transition views that do not implement it keep the same behavior.
 
 ## R6: Addressable Loading
 

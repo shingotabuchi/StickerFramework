@@ -12,7 +12,8 @@ namespace StickerFwk.Core.Debug.Editor
     /// </summary>
     internal static class DebugMenuSettingsProvider
     {
-        private const string SettingsAssetPath = "Assets/Settings/DebugMenuSettings.asset";
+        private const string SettingsAssetPath = DebugMenuSettings.ProjectSettingsAssetPath;
+        private const string LegacySettingsAssetPath = DebugMenuSettings.LegacyProjectSettingsAssetPath;
         private const string SettingsMenuPath = "Project/Sticker/Debug Menu";
 
         [SettingsProvider]
@@ -74,17 +75,37 @@ namespace StickerFwk.Core.Debug.Editor
                 return existing;
             }
 
+            var legacy = AssetDatabase.LoadAssetAtPath<DebugMenuSettings>(LegacySettingsAssetPath);
+            if (legacy != null)
+            {
+                EnsureSettingsDirectoryExists();
+                var error = AssetDatabase.MoveAsset(LegacySettingsAssetPath, SettingsAssetPath);
+                if (string.IsNullOrEmpty(error))
+                {
+                    AssetDatabase.SaveAssets();
+                    return AssetDatabase.LoadAssetAtPath<DebugMenuSettings>(SettingsAssetPath) ?? legacy;
+                }
+
+                UnityEngine.Debug.LogWarning(
+                    $"Could not move DebugMenuSettings asset from {LegacySettingsAssetPath} to {SettingsAssetPath}: {error}");
+                return legacy;
+            }
+
+            EnsureSettingsDirectoryExists();
+            var instance = ScriptableObject.CreateInstance<DebugMenuSettings>();
+            AssetDatabase.CreateAsset(instance, SettingsAssetPath);
+            AssetDatabase.SaveAssets();
+            return instance;
+        }
+
+        private static void EnsureSettingsDirectoryExists()
+        {
             var directory = Path.GetDirectoryName(SettingsAssetPath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
                 AssetDatabase.Refresh();
             }
-
-            var instance = ScriptableObject.CreateInstance<DebugMenuSettings>();
-            AssetDatabase.CreateAsset(instance, SettingsAssetPath);
-            AssetDatabase.SaveAssets();
-            return instance;
         }
     }
 }

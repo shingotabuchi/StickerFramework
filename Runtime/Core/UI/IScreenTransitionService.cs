@@ -15,5 +15,10 @@ namespace StickerFwk.Core.UI
             Func<CancellationToken, UniTask> action,
             string transitionViewTag = null,
             CancellationToken ct = default);
+
+        UniTask ExecuteAsync(
+            Func<IProgress<float>, CancellationToken, UniTask> action,
+            string transitionViewTag = null,
+            CancellationToken ct = default);
     }
 }

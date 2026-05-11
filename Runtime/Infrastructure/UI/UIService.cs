@@ -56,7 +56,8 @@ namespace StickerFwk.Infrastructure.UI
                 cameraRegisteredSubscriber,
                 windowOpenedPublisher,
                 windowClosedPublisher,
-                resolver?.ResolveOrDefault<WindowAssetKeyOptions>())
+                resolver?.ResolveOrDefault<WindowAssetKeyOptions>(),
+                resolver?.ResolveOrDefault<UICanvasOptions>())
         {
         }
 
@@ -68,13 +69,34 @@ namespace StickerFwk.Infrastructure.UI
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher,
             WindowAssetKeyOptions keyOptions)
+            : this(
+                assetRequester,
+                resolver,
+                cameraService,
+                cameraRegisteredSubscriber,
+                windowOpenedPublisher,
+                windowClosedPublisher,
+                keyOptions,
+                null)
+        {
+        }
+
+        public UIService(
+            IAssetRequester assetRequester,
+            IObjectResolver resolver,
+            ICameraService cameraService,
+            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
+            IPublisher<WindowOpenedEvent> windowOpenedPublisher,
+            IPublisher<WindowClosedEvent> windowClosedPublisher,
+            WindowAssetKeyOptions keyOptions,
+            UICanvasOptions canvasOptions)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
             _windowOpenedPublisher = windowOpenedPublisher;
             _windowClosedPublisher = windowClosedPublisher;
             _windowAssetResolver = new WindowAssetResolver(assetRequester);
-            _layerManager = new UILayerManager(cameraService, cameraRegisteredSubscriber);
+            _layerManager = new UILayerManager(cameraService, cameraRegisteredSubscriber, canvasOptions);
             _stacks = new Dictionary<UILayer, Stack<WindowHandle>>();
             _layerLocks = new Dictionary<UILayer, SemaphoreSlim>();
             _keyPrefix = keyOptions?.Prefix ?? string.Empty;

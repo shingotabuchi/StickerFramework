@@ -1,7 +1,7 @@
 #if STICKER_DEBUG
 namespace StickerFwk.Core.Debug
 {
-    /// <summary>Where the always-on debug toggle button is anchored when the menu is closed.</summary>
+    /// <summary>Screen corner anchors used by the debug menu button and panel.</summary>
     public enum DebugMenuButtonCorner
     {
         TopLeft,

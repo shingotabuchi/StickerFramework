@@ -31,6 +31,23 @@ namespace StickerFwk.Core.Debug
                 return;
             }
 
+            var addedRootItems = false;
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                if (sorted[i] is not IDebugRootPageContributor contributor)
+                {
+                    continue;
+                }
+
+                contributor.BuildRoot(builder);
+                addedRootItems = true;
+            }
+
+            if (addedRootItems)
+            {
+                builder.Separator();
+            }
+
             for (var i = 0; i < sorted.Count; i++)
             {
                 var page = sorted[i];

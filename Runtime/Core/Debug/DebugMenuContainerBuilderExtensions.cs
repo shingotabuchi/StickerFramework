@@ -18,7 +18,10 @@ namespace StickerFwk.Core.Debug
         /// and force-resolves the service so the corner toggle button shows up at startup.
         /// </summary>
         /// <param name="builder">The VContainer builder for the host scope.</param>
-        /// <param name="settings">Optional layout / sizing settings. Defaults to <see cref="DebugMenuSettings.Default"/>.</param>
+        /// <param name="settings">
+        /// Optional layout / sizing settings. Defaults to the project settings asset, or
+        /// <see cref="DebugMenuSettings.Default"/> if none exists.
+        /// </param>
         /// <remarks>
         /// Any feature can contribute additional pages by registering them as
         /// <c>IDebugPage</c>: <c>builder.Register&lt;IDebugPage, MyPage&gt;(Lifetime.Singleton)</c>.
@@ -26,7 +29,7 @@ namespace StickerFwk.Core.Debug
         /// </remarks>
         public static void UseDebugMenu(this IContainerBuilder builder, DebugMenuSettings settings = null)
         {
-            builder.RegisterInstance(settings ?? DebugMenuSettings.Default);
+            builder.RegisterInstance(settings ?? DebugMenuSettings.LoadProjectSettingsOrDefault());
 
             builder.RegisterComponentOnNewGameObject<DebugMenuService>(Lifetime.Singleton, "DebugMenuOverlay")
                 .DontDestroyOnLoad()

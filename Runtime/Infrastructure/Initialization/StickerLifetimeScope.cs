@@ -1,5 +1,6 @@
 using VContainer;
 using VContainer.Unity;
+using StickerFwk.Core;
 
 namespace StickerFwk.Infrastructure.Initialization
 {
@@ -11,6 +12,8 @@ namespace StickerFwk.Infrastructure.Initialization
     {
         protected sealed override void Configure(IContainerBuilder builder)
         {
+            builder.UseScopeCancellation(this);
+
             foreach (var installer in GetComponents<IInstaller>())
             {
                 installer.Install(builder);

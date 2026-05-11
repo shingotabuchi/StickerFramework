@@ -74,13 +74,14 @@ Packages/com.stickerfwk.core/
 | `Initialization/` | `IRootInitService`, `RootInitSettings` | App startup contract and configuration asset |
 | `Input/` | `IInputService`, `IRawInputService`, `IInputLockService`, `InputLockService`, `InputLockChangedEvent` | Input abstraction with ref-counted locking |
 | `InspectorTools/` | `ButtonAttribute` | Custom inspector attributes |
+| `Lifetime/` | `IScopeCancellation`, `ICancellationHandle`, `ScopeCancellation`, `UseScopeCancellation` | LifetimeScope-bound cancellation for presenters and scoped services |
 | `MasterData/` | `IMasterData`, `IMasterDataRepository`, `IMasterDataScriptableObject`, `MasterAsset<T>`, `MasterData<T>` | Static data loading and query |
 | `Physics/` | `IWorldRaycastService` | Physics raycast contract |
 | `Presentation/` | `IPresenter<TView>`, `Presenter<TView>`, `IWindowPresenter<TView>`, `WindowPresenter<TView>` | Plain C# presenter contracts for moving view-specific logic out of MonoBehaviours |
 | `Rendering/` | `IBlurService`, `BlurTransitionEvent` | Blur effect contract and event |
 | `Screen/` | `ScreenService`, `ScreenChangedEvent` | Screen resolution monitoring |
 | `Time/` | `ITimeService` | Time abstraction contract |
-| `UI/` | `IUIService`, `IScreenTransitionService`, `ITransition` (+ built-in `FadeTransition`, `SlideTransition`, `ScaleTransition`, `NoneTransition`, `AnimatorTransition`, `TimelineTransition`, `AnimatorTransitionTargets`, `TimelineTransitionTargets`, `PlayableDirectorExtensions`), `WindowView`, `WindowOptions`, `CoolButton`, `SafeAreaView`, `ScreenTransitionView`, `UILayer`, `WindowOpenedEvent`, `WindowClosedEvent` | Stack-based UI window system |
+| `UI/` | `IUIService`, `IScreenTransitionService`, `IScreenTransitionProgressSink`, `ITransition` (+ built-in `FadeTransition`, `SlideTransition`, `ScaleTransition`, `NoneTransition`, `AnimatorTransition`, `TimelineTransition`, `AnimatorTransitionTargets`, `TimelineTransitionTargets`, `PlayableDirectorExtensions`), `WindowView`, `WindowOptions`, `CoolButton`, `SafeAreaView`, `ScreenTransitionView`, `UILayer`, `WindowOpenedEvent`, `WindowClosedEvent` | Stack-based UI window system |
 | `Utilities/` | `Deque<T>`, `KeyedOperationGate<TKey>`, `SmoothMath` | General-purpose data structures and math |
 
 ### Infrastructure — `Runtime/Infrastructure/`

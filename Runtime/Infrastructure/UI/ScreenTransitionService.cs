@@ -7,6 +7,8 @@ namespace StickerFwk.Infrastructure.UI
 {
     public class ScreenTransitionService : IScreenTransitionService
     {
+        private static readonly IProgress<float> NoProgress = new NullProgress();
+
         readonly IUIService _uiService;
 
         public ScreenTransitionService(IUIService uiService)
@@ -19,19 +21,62 @@ namespace StickerFwk.Infrastructure.UI
             string transitionViewTag = null,
             CancellationToken ct = default)
         {
+            if (action == null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
+            await ExecuteAsync((_, actionCt) => action(actionCt), transitionViewTag, ct);
+        }
+
+        public async UniTask ExecuteAsync(
+            Func<IProgress<float>, CancellationToken, UniTask> action,
+            string transitionViewTag = null,
+            CancellationToken ct = default)
+        {
             // 1. Push overlay — awaits show transition so screen is fully covered
-            await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
+            if (action == null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
+            var view = await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
+            var progress = view is IScreenTransitionProgressSink sink
+                ? new ScreenTransitionProgress(sink)
+                : NoProgress;
+            progress.Report(0f);
 
             try
             {
                 // 2. Run the caller's action while screen is covered
-                await action(ct);
+                await action(progress, ct);
+                progress.Report(1f);
             }
             finally
             {
                 // 3. Pop overlay — awaits hide transition to reveal. Use an uncancelled
                 // caller token so a cancelled load does not leave the overlay stuck.
                 await _uiService.Pop<ScreenTransitionView>(CancellationToken.None);
+            }
+        }
+
+        private sealed class NullProgress : IProgress<float>
+        {
+            public void Report(float value) { }
+        }
+
+        private sealed class ScreenTransitionProgress : IProgress<float>
+        {
+            private readonly IScreenTransitionProgressSink _sink;
+
+            public ScreenTransitionProgress(IScreenTransitionProgressSink sink)
+            {
+                _sink = sink;
+            }
+
+            public void Report(float value)
+            {
+                _sink.SetProgress(value);
             }
         }
     }

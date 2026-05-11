@@ -142,6 +142,11 @@ Downstream projects migrating from the old procedural camera pipeline should:
 - `ISceneTransitionService` — Locks input, covers screen with transition overlay, loads scene, waits for ready signal, reveals.
 - `SceneReadyNotifier` — Completion source. Scene code calls `NotifyReady()` when initialization is done.
 
+### Scope Lifetime (`Core/Lifetime/`)
+
+- `IScopeCancellation` — Cancellation token for the current `LifetimeScope`; register with `builder.UseScopeCancellation(this)` or derive from `StickerLifetimeScope`.
+- `ICancellationHandle` — Disposable child cancellation handle. Use `IScopeCancellation.CreateLinked()` for background loops and other cancellable operations that should stop on either manual dispose or scope teardown.
+
 ### Rendering (`Core/Rendering/`)
 
 - `IBlurService` — Ref-counted blur requests with easing transitions. Dual Kawase blur via URP renderer feature.
@@ -162,6 +167,18 @@ All services are registered in a **RootLifetimeScope** and injected via construc
 - `IDisposable` — cleanup
 
 Features can create **child LifetimeScopes** for scoped dependencies. Pass the child resolver's `InjectGameObject` via `WindowOptions.Inject` so pushed windows get feature-specific injection. The `Inject` hook is a DI-agnostic `Action<GameObject>`, keeping `Core.UI` free of any container references.
+
+Register `IScopeCancellation` in every scene/feature scope that owns async work:
+
+```csharp
+protected override void Configure(IContainerBuilder builder)
+{
+    builder.UseScopeCancellation(this);
+    builder.RegisterEntryPoint<MyPresenter>();
+}
+```
+
+Presenters should prefer this token over private dispose `CancellationTokenSource` fields. For restartable loops, create a child handle and dispose it when the loop stops; scope teardown cancels it automatically.
 
 ### 2. State and Logic Ownership
 

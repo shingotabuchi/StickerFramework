@@ -41,7 +41,7 @@ A general-purpose UI framework for managing windows (menus, HUD, popups, dialogs
 
 ## R3: Fixed Layer System
 
-Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Core/UI/UILayer.cs`). Each layer is bound to a dedicated `CameraId` and gets its own Canvas, created on demand by `UILayerManager`:
+Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Core/UI/UILayer.cs`). Each layer is bound to one framework-defined `CameraId` and gets its own Canvas, created on demand by `UILayerManager`:
 
 | Layer | Sort Order | Bound Camera (`CameraId`) | Purpose |
 |-------|-----------|---------------------------|---------|
@@ -49,10 +49,12 @@ Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Co
 | **UIOverlay** | 200 | `CameraId.UIOverlay` | UI that must render above the main UI camera |
 | **Wipe** | 300 | `CameraId.Wipe` | Full-screen scene-transition wipes |
 
+`UI`, `UIOverlay`, and `Wipe` are the only camera IDs reserved by the framework. Projects may define any additional IDs in project code, for example `CameraIds.Game` or `CameraIds.BirdsEye`.
+
 - Windows specify which layer they belong to via the `Layer` field on `WindowView` (default `UILayer.UI`).
-- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — apply the appropriate `CameraProfile` first.
+- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — place a scene-resident camera with `ManagedCamera` for that ID before pushing the window.
 - Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
-- `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that swap camera profiles).
+- `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that replace scene-resident UI cameras).
 
 > **Why only three layers?** The framework intentionally does **not** split HUD / Window / Popup / Modal across separate `UILayer` values. Within `UI`, ordering between simultaneously open windows is determined by push order (later pushes draw above earlier ones) and child-sibling order inside a prefab; modality is controlled per-window via `WindowView.IsBlocking`. Add a new enum entry only when you need a dedicated camera/canvas pair (different post-processing, guaranteed top/bottom rendering, etc.) — not just because two windows have different gameplay roles.
 
@@ -141,30 +143,30 @@ Runtime overrides can be passed via a `WindowOptions` object when calling `UISer
 
 ### Behaviour
 
-- In `Awake`, the binder forces `RenderMode.ScreenSpaceOverlay` if no camera is bound, so the canvas is visible from the first frame even before any `CameraProfile` is pushed.
+- In `Awake`, the binder forces `RenderMode.ScreenSpaceOverlay` if no camera is bound, so the canvas is visible from the first frame even before its scene-resident `ManagedCamera` registers.
 - On VContainer injection it captures `ICameraService` and subscribes to `CameraRegisteredEvent`. If the target `CameraId` is already registered, it binds immediately.
 - On `CameraRegisteredEvent(IsRegistered: true)` for the configured `CameraId`, the canvas switches to `ScreenSpaceCamera` with `worldCamera` set and the configured `planeDistance` applied. Idempotent — no-ops when the camera reference is unchanged.
-- On `CameraRegisteredEvent(IsRegistered: false)` it reverts to `ScreenSpaceOverlay` and clears `worldCamera`, so the canvas keeps rendering across profile transitions.
+- On `CameraRegisteredEvent(IsRegistered: false)` it reverts to `ScreenSpaceOverlay` and clears `worldCamera`, so the canvas keeps rendering while its target camera is absent.
 - Disposes its subscription in `OnDestroy`.
 
 ### Required wiring
 
 | Concern | Where |
 |---|---|
-| Push a `CameraProfile` that includes the target `CameraId` | `CameraProfileScopeBinding` on the scope's GameObject |
+| Register a scene camera for the target `CameraId` | `ManagedCamera` on the camera GameObject |
 | Auto-install `IInstaller` MonoBehaviours on a scope | Scope inherits from `StickerLifetimeScope` |
 | Auto-inject scene-authored binders | `builder.RegisterComponentInHierarchy<CanvasCameraBinder>()` in `ConfigureScope` |
 | Provide `ICameraService` + `ISubscriber<CameraRegisteredEvent>` | Registered in `RootLifetimeScope` (parent scope) |
 
 ### Layering
 
-The binder does **not** set `Canvas.sortingOrder`. Stack order between camera-rendered canvases is determined by the cameras' `depth` in `CameraSystemSettings._cameraDefinitions`. A binder targeting `CameraId.UI` (depth 20) renders below `CameraId.Wipe` (depth 50), so wipe transitions correctly draw above an authored boot canvas.
+The binder does **not** set `Canvas.sortingOrder`. Stack order between camera-rendered canvases is determined by the authored camera setup: URP Base/Overlay render type, the active Base chosen by `ICameraService`, overlay camera depth, and each Canvas' own sorting order. A binder targeting `CameraId.UI` can therefore render below `CameraId.Wipe` when those scene cameras are authored and stacked that way.
 
 ### What it deliberately does not do
 
 - Does not parent your canvas under `[UI Root]`. It stays where you authored it.
 - Does not register the canvas with `UIService` / `UILayerManager`. Windows pushed via `IUIService.Push` still go to dynamic layer canvases.
-- Does not toggle `Canvas.enabled`. Use a separate component if you need show/hide on profile transitions instead of overlay fallback.
+- Does not toggle `Canvas.enabled`. Use a separate component if you need show/hide on camera registration changes instead of overlay fallback.
 - Does not configure `CanvasScaler` or `GraphicRaycaster` — those are authored in-scene.
 
 > Do not pre-assign `Canvas.worldCamera` in the inspector. The binder owns that field and will overwrite it on bind.

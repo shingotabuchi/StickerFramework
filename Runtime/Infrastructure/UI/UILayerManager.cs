@@ -39,13 +39,11 @@ namespace StickerFwk.Infrastructure.UI
 
         static bool TryCameraIdToLayer(CameraId cameraId, out UILayer layer)
         {
-            switch (cameraId)
-            {
-                case CameraId.UI: layer = UILayer.UI; return true;
-                case CameraId.UIOverlay: layer = UILayer.UIOverlay; return true;
-                case CameraId.Wipe: layer = UILayer.Wipe; return true;
-                default: layer = default; return false;
-            }
+            if (cameraId == CameraId.UI) { layer = UILayer.UI; return true; }
+            if (cameraId == CameraId.UIOverlay) { layer = UILayer.UIOverlay; return true; }
+            if (cameraId == CameraId.Wipe) { layer = UILayer.Wipe; return true; }
+            layer = default;
+            return false;
         }
 
         public void Initialize()
@@ -67,23 +65,22 @@ namespace StickerFwk.Infrastructure.UI
             {
                 UnityEngine.Object.DontDestroyOnLoad(_root);
             }
-            // Re-bind layer canvases whenever their backing camera is (re)registered. This is what
-            // keeps Game→Game scene transitions working: the previous Gameplay profile's UI/UIOverlay
-            // cameras are destroyed during the transition, then the new Gameplay profile registers
-            // fresh ones — without this, cached canvases keep pointing to the destroyed cameras.
+            // Re-bind layer canvases whenever their backing camera is (re)registered. This keeps
+            // scene transitions working when a scene unregisters UI cameras and the next scene
+            // registers fresh ones — without this, cached canvases keep pointing to destroyed cameras.
             _cameraSubscription = _cameraRegisteredSubscriber?.Subscribe(OnCameraRegistered);
         }
 
         // Ensures the layer canvas exists and is bound to its target camera. Fails fast if the
-        // camera profile has not registered the target camera — callers (UIService.Push) treat
-        // this as a setup error and abort the push instead of stalling.
+        // target camera has not been registered — callers (UIService.Push) treat this as a
+        // setup error and abort the push instead of stalling.
         public bool TryEnsureLayer(UILayer layer, out string error)
         {
             var cameraId = LayerToCameraId(layer);
             if (!_cameraService.TryGetCamera(cameraId, out var camera) || camera == null)
             {
                 error = $"Camera '{cameraId}' for layer '{layer}' is not registered. " +
-                        "Apply a CameraProfile that includes it (e.g. via RootLifetimeScope) before pushing this window.";
+                        "Register a camera with this id via ICameraService and ensure a Base is active (use ICameraService.SetDefaultBase / PushBase) before pushing this window.";
                 return false;
             }
 

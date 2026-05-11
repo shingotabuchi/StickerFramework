@@ -1,109 +1,131 @@
+using System;
 using System.Collections.Generic;
 
 namespace StickerFwk.Core
 {
-    // Snapshot of one camera registered through the active profiles. Pure data so
-    // CameraStackResolver can be unit-tested without Unity.
     public readonly struct CameraSlot
     {
-        public readonly CameraId Id;
-        public readonly float Depth;
-
-        public CameraSlot(CameraId id, float depth)
+        public CameraSlot(CameraId id, bool isBase, float depth)
         {
             Id = id;
+            IsBase = isBase;
             Depth = depth;
         }
+
+        public CameraId Id { get; }
+        public bool IsBase { get; }
+        public float Depth { get; }
     }
 
-    // Decides which camera is the Base and how the Base's overlay stack is composed.
-    //
-    // Rules:
-    //   1. Every slot supplied is "wanted" (slots come from active profiles only — there is no
-    //      additional gate like mode or lease).
-    //   2. The lowest-depth slot becomes the Base. All other slots become Overlays.
-    //   3. Overlays are sorted by depth ascending and inserted into the Base's stack.
-    //
-    // The Base/Overlay role is therefore implicit in the depth ordering — there is no per-camera
-    // "render type" authored in CameraSystemSettings.
-    //
-    // Results are written into caller-provided buffers (avoid per-frame allocations).
     public static class CameraStackResolver
     {
         public readonly struct Result
         {
-            public readonly bool HasBase;
-            public readonly CameraId WinningBase;
-
-            public Result(bool hasBase, CameraId winningBase)
+            public Result(
+                IReadOnlyList<CameraId> enabledIds,
+                IReadOnlyList<CameraId> cameraStackOrder,
+                CameraId? activeBase)
             {
-                HasBase = hasBase;
-                WinningBase = winningBase;
+                EnabledIds = enabledIds;
+                CameraStackOrder = cameraStackOrder;
+                ActiveBase = activeBase;
             }
+
+            public readonly IReadOnlyList<CameraId> EnabledIds;
+            public readonly IReadOnlyList<CameraId> CameraStackOrder;
+            public readonly CameraId? ActiveBase;
         }
 
-        // outEnabled : final enabled set (winning base + all overlays).
-        // outStack   : overlay ids sorted by depth ascending; they go into the winning base's stack.
         public static Result Resolve(
             IReadOnlyList<CameraSlot> slots,
-            List<CameraId> outEnabled,
-            List<CameraId> outStack)
+            IReadOnlyList<CameraId> baseStack,
+            ISet<CameraId> disabledOverlays)
         {
-            outEnabled.Clear();
-            outStack.Clear();
-
-            if (slots.Count == 0)
+            if (slots == null)
             {
-                return new Result(false, default);
+                throw new ArgumentNullException(nameof(slots));
             }
 
-            var winningIndex = 0;
-            var winningDepth = slots[0].Depth;
-            for (var i = 1; i < slots.Count; i++)
+            if (baseStack == null)
             {
-                if (slots[i].Depth < winningDepth)
-                {
-                    winningDepth = slots[i].Depth;
-                    winningIndex = i;
-                }
+                throw new ArgumentNullException(nameof(baseStack));
             }
 
-            var winningBase = slots[winningIndex].Id;
-            outEnabled.Add(winningBase);
+            if (disabledOverlays == null)
+            {
+                throw new ArgumentNullException(nameof(disabledOverlays));
+            }
+
+            var activeBase = ResolveActiveBase(slots, baseStack);
+            var enabledIds = new List<CameraId>();
+            var cameraStackOrder = new List<CameraId>();
+
+            if (!activeBase.HasValue)
+            {
+                return new Result(enabledIds, cameraStackOrder, null);
+            }
+
+            enabledIds.Add(activeBase.Value);
 
             for (var i = 0; i < slots.Count; i++)
             {
-                if (i == winningIndex)
+                var slot = slots[i];
+                if (slot.IsBase || disabledOverlays.Contains(slot.Id))
                 {
                     continue;
                 }
 
-                var s = slots[i];
-                outEnabled.Add(s.Id);
-
-                // Insertion-sort overlays by depth ascending. Overlay counts are tiny in practice,
-                // so this avoids both the closure allocation of List.Sort(Comparison) and the need
-                // for a parallel depth buffer.
-                var insertAt = outStack.Count;
-                while (insertAt > 0 && FindDepth(slots, outStack[insertAt - 1]) > s.Depth)
-                {
-                    insertAt--;
-                }
-                outStack.Insert(insertAt, s.Id);
+                enabledIds.Add(slot.Id);
+                InsertOverlaySortedByDepth(cameraStackOrder, slot, slots);
             }
 
-            return new Result(true, winningBase);
+            return new Result(enabledIds, cameraStackOrder, activeBase);
+        }
+
+        static CameraId? ResolveActiveBase(IReadOnlyList<CameraSlot> slots, IReadOnlyList<CameraId> baseStack)
+        {
+            if (baseStack.Count == 0)
+            {
+                return null;
+            }
+
+            var top = baseStack[baseStack.Count - 1];
+            for (var i = 0; i < slots.Count; i++)
+            {
+                var slot = slots[i];
+                if (slot.IsBase && slot.Id == top)
+                {
+                    return top;
+                }
+            }
+
+            return null;
+        }
+
+        static void InsertOverlaySortedByDepth(
+            List<CameraId> cameraStackOrder,
+            CameraSlot slot,
+            IReadOnlyList<CameraSlot> slots)
+        {
+            var insertAt = cameraStackOrder.Count;
+            while (insertAt > 0 && FindDepth(slots, cameraStackOrder[insertAt - 1]) > slot.Depth)
+            {
+                insertAt--;
+            }
+
+            cameraStackOrder.Insert(insertAt, slot.Id);
         }
 
         static float FindDepth(IReadOnlyList<CameraSlot> slots, CameraId id)
         {
             for (var i = 0; i < slots.Count; i++)
             {
-                if (slots[i].Id.Equals(id))
+                if (slots[i].Id == id)
                 {
                     return slots[i].Depth;
                 }
             }
+
             return 0f;
         }
     }

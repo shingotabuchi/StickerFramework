@@ -4,8 +4,8 @@ using VContainer.Unity;
 namespace StickerFwk.Infrastructure.Initialization
 {
     // Base LifetimeScope that auto-installs any IInstaller MonoBehaviours attached to the same
-    // GameObject before delegating to the subclass. This is what makes drop-in components like
-    // CameraProfileScopeBinding work without each scope having to remember to iterate
+    // GameObject before delegating to the subclass. This lets drop-in installer
+    // components contribute bindings without each scope having to remember to iterate
     // GetComponents<IInstaller>() manually.
     public abstract class StickerLifetimeScope : LifetimeScope
     {

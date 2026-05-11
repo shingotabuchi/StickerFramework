@@ -48,7 +48,7 @@ The central system. Stack-based window management with async transitions.
 - `WindowView` — Abstract MonoBehaviour base class for all UI screens. Configurable via Inspector: layer, blocking, transition type/duration.
 - `IUIService` — Push/Pop/Replace windows on layer stacks. Loads prefabs from Addressables using key `Views/{TypeName}.prefab`. `Pop(WindowView)` removes a specific instance regardless of stack position.
 - `ScopedUIService` — Per-scope wrapper that registers `As<IUIService>()` in a child `LifetimeScope` to auto-pop tracked windows on scope dispose. Transparent to consumers.
-- `UILayer` — Enum with three values, each backed by a dedicated camera (`CameraId`) and Canvas: `UI(100)`, `UIOverlay(200)`, `Wipe(300)`. Sort order matches the integer value.
+- `UILayer` — Enum with three values, each backed by a framework-defined camera slot (`CameraId.UI`, `CameraId.UIOverlay`, `CameraId.Wipe`) and Canvas: `UI(100)`, `UIOverlay(200)`, `Wipe(300)`. Sort order matches the integer value.
 - `IScreenTransitionService` — Full-screen overlay transitions (fade to black, wipe, etc.) for scene changes.
 - `WindowOptions` — Runtime overrides for blocking, transition type/duration, and custom DI resolver.
 
@@ -83,9 +83,42 @@ Use presenters for view-specific logic such as MessagePipe/R3 subscriptions, UI 
 
 ### Camera System (`Core/Camera/`)
 
-- `ICameraService` — Register/unregister cameras by `CameraId`. Query by ID or layer-mask via `GetCameraForRenderer`.
-- `ICameraProfileService` — Push/pop `CameraProfile`s; framework owns camera lifetime.
-- `ManagedCamera` — Legacy MonoBehaviour kept only for non-migrated viewer/test scenes (StageViewer, BlurTest). Migrated scenes do not contain `Camera` components; cameras come from `CameraProfile` push/pop.
+Scene cameras are authored as normal Unity GameObjects. `ManagedCamera` registers them with `ICameraService` on enable and unregisters them on disable.
+
+**Key types:**
+- `CameraId` — Serializable readonly struct value object. The framework reserves `CameraId.UI`, `CameraId.UIOverlay`, and `CameraId.Wipe`; projects define additional static IDs such as `CameraIds.Game` and `CameraIds.BirdsEye`.
+- `ICameraService` — Registers cameras by ID, exposes `ActiveBase`, publishes `ActiveBaseChangedEvent`, sets the default Base, pushes temporary Base leases, and disables overlays with ref-counted leases.
+- `ManagedCamera` — Scene component that bridges a Unity `Camera` to `ICameraService.Register` / `Unregister`.
+
+URP Base/Overlay role comes from each registered camera's `UniversalAdditionalCameraData.renderType`. The same `CameraId` can be a Base in one scene and an Overlay in another.
+
+**BirdsEye swap:**
+```csharp
+public static class CameraIds
+{
+    public static readonly CameraId Game = new("Game");
+    public static readonly CameraId BirdsEye = new("BirdsEye");
+}
+
+// On Game scene scope build:
+_cameraService.SetDefaultBase(CameraIds.Game);
+
+// During gameplay to switch to birds-eye:
+_birdsEyeLease = _cameraService.PushBase(CameraIds.BirdsEye);
+
+// To switch back:
+_birdsEyeLease.Dispose();
+```
+
+#### Migration from procedural pipeline
+
+Downstream projects migrating from the old procedural camera pipeline should:
+
+1. Re-author cameras as scene-resident GameObjects with `ManagedCamera`.
+2. Declare project-side IDs as `static readonly CameraId Xxx = new("Xxx")` constants.
+3. Set each camera's URP `renderType` in the scene (`Base` or `Overlay`).
+4. Call `_cameraService.SetDefaultBase(...)` at scope build for the scene's default Base.
+5. Use `_cameraService.PushBase(...)` for temporary overwrites such as BirdsEye, and dispose the returned lease to restore the previous/default Base.
 
 ### Time System (`Core/Time/`)
 
@@ -153,7 +186,8 @@ Built-in events:
 WindowOpenedEvent(string Key, UILayer Layer)
 WindowClosedEvent(string Key, UILayer Layer)
 InputLockChangedEvent(bool IsLocked)
-CameraRegisteredEvent(CameraId Id)
+CameraRegisteredEvent(CameraId CameraId, bool IsRegistered)
+ActiveBaseChangedEvent(CameraId Previous, CameraId Current)
 ScreenChangedEvent                          // marker (no data)
 BlurTransitionEvent(bool Enabled, EaseType Ease, float Duration)
 ```
@@ -166,6 +200,8 @@ All I/O operations return `UniTask`. Cancellation tokens propagate through all c
 
 - Asset handles are ref-counted — dispose when done.
 - Input locks return `IDisposable` — use `using var _ = lockService.Lock();`.
+- Temporary camera Base overrides return `IDisposable` — dispose the `PushBase` lease to restore the previous/default Base.
+- Overlay disable requests return `IDisposable` and are ref-counted.
 - Blur requests return `IDisposable`.
 - `WindowView.AddDisposable()` tracks subscriptions; the underlying `CompositeDisposable` is disposed in `OnDispose` (when the window is destroyed at pop time), not on hide. Subscriptions therefore live for the full window lifetime.
 

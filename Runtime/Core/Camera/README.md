@@ -1,106 +1,159 @@
 # Camera System
 
-> Status: current. Documents the project-wide camera registration, profiles, and stack resolver. Kept in sync with code in `Runtime/Core/Camera/` and `Runtime/Infrastructure/Camera/`.
+> Status: current. Documents scene-resident camera registration and base/overlay stack control. Kept in sync with code in `Runtime/Core/Camera/` and `Runtime/Infrastructure/Camera/`.
 
-The framework camera system manages all cameras in the project from script. Scenes do **not** author cameras; profiles do.
+The framework camera system no longer creates cameras procedurally. Cameras are authored in scenes as normal Unity `Camera` GameObjects and opt into the framework with `ManagedCamera`.
 
-The activation model is intentionally minimal: **push a profile and every camera it declares renders. Pop the profile and they go away.** There is no per-camera lease, no mode flag, no activation policy — the only mechanism for turning cameras on or off is profile push/pop.
+The activation model is intentionally small:
+
+- Scene cameras register by `CameraId` when enabled and unregister when disabled.
+- The active Base camera is selected by `SetDefaultBase` plus scoped `PushBase` leases.
+- Overlay cameras are enabled by default and can be temporarily hidden with ref-counted `DisableOverlay` leases.
+- URP Base/Overlay role is read from each camera's `UniversalAdditionalCameraData.renderType` at registration time.
 
 ## Concepts
 
 ### `CameraId`
-A small enum identifying every camera role used in the project (`Background`, `World`, `UI`, `WorldOverlay`, `UIOverlay`, `Wipe`). Adding a new role = add an enum entry + reference it from a profile.
 
-### `CameraDefinition`
-A serialized blob describing one camera: `CameraId`, depth, culling mask, clear flags, etc. Depth determines both stack order **and** Base/Overlay role: among all currently-active cameras the one with the lowest depth becomes the Base; every other camera becomes an Overlay in the Base's stack, sorted by depth ascending. Definitions live in `CameraSystemSettings._cameraDefinitions` — there is exactly one definition per `CameraId` for the whole project, and profiles only reference cameras by id.
+`CameraId` is a serializable value object:
 
-### `CameraProfile` (ScriptableObject)
-A list of `CameraId`s plus a `CameraProfileId`. Profiles are the unit of push/pop. They do not carry per-camera settings — those are owned by `CameraSystemSettings`.
-
-### `CameraSystemSettings` (ScriptableObject)
-The catalogue of all profiles (`_profiles`) **and** all per-camera settings (`_cameraDefinitions`) in the project. Referenced by `RootLifetimeScope`. `OnValidate` warns (does not throw) when two `CameraDefinition` entries share a `CameraId`.
-
-### `CameraProfileId`
-- `Root` — minimal always-pushed profile. References `Wipe`. Pushed by `RootLifetimeScope` on app start so transitions can happen even when no scene is loaded.
-- `BackgroundOnly` — pushed when no gameplay scene is active so `Background` becomes the Base. Popped before pushing a profile that owns its own Base camera (e.g. `Gameplay`).
-- `Gameplay` — gameplay scene profile. References `World`, `UI`, `WorldOverlay`, `UIOverlay`. Pushed by `StickerGameLifetimeScope` while the game scene is active.
-
-## Service
-
-### `ICameraProfileService`
 ```csharp
-IDisposable Push(CameraProfileId id);
-bool IsActive(CameraProfileId id);
-bool TryGetDefinition(CameraId id, out CameraDefinition def);
-IReadOnlyCollection<CameraProfileId> ActiveProfiles { get; }
+[Serializable]
+public readonly struct CameraId : IEquatable<CameraId>
 ```
 
-Refcount-based at two levels:
+The framework reserves only three static slots:
 
-1. **Per-profile refcount.** `Push(id)` increments and returns an `IDisposable` profile handle. Disposing the handle decrements. The first push of a profile materialises its cameras; the last release tears them down.
-2. **Per-camera refcount.** When two active profiles both reference the same `CameraId`, the camera is created once and survives until **both** profiles release. Both profiles share the single `CameraDefinition` registered in `CameraSystemSettings`.
+| ID | Purpose |
+|---|---|
+| `CameraId.UI` | Standard UI layer camera |
+| `CameraId.UIOverlay` | UI that must render above the main UI camera |
+| `CameraId.Wipe` | Full-screen scene-transition wipes |
 
-## Resolution
-
-After every Push/Pop, `CameraProfileService.Recompute()` builds a `CameraSlot` (id, depth) for every currently registered camera and hands the list to `CameraStackResolver.Resolve(...)`:
-
-1. **Pick winning base.** The slot with the **lowest depth** wins the Base role.
-2. **Build enabled set + stack.** All slots are enabled. Non-base slots are sorted by depth ascending and become the winning Base's `cameraStack`.
-3. **Apply.** Set `UniversalAdditionalCameraData.renderType` per camera (Base for the winner, Overlay for the rest), then set `gameObject.activeSelf` and `Camera.enabled`.
-
-The Base/Overlay role is **derived purely from depth** — there is no per-camera marker. To make a camera "the Base while no scene is loaded", give it a low depth and isolate it in its own profile (e.g. `BackgroundOnly`) so it isn't active when a scene's profile (with an even-lower-depth Base, like `World`) is pushed.
-
-## Lifecycle Walkthrough
-
-Boot (`Root` + `BackgroundOnly` pushed):
-- Cameras: `Wipe`, `Background`. Both render. `Background` (depth=-5) wins the base slot; `Wipe` (depth=2) overlays it.
-
-Game scene loaded (`BackgroundOnly` popped, `Gameplay` pushed on top of `Root`):
-- Cameras: `Wipe`, `World`, `UI`, `WorldOverlay`, `UIOverlay`. All render.
-- `World` (depth=-10) wins the base slot.
-- Stack on `World`: `[UI, WorldOverlay, UIOverlay, Wipe]` (sorted by depth ascending).
-
-Game scene unloaded (`Gameplay` popped, `BackgroundOnly` re-pushed):
-- `Gameplay`-only cameras destroyed. `Background` becomes the winning base again.
-
-## Pushing a profile from a scope
+Projects define additional IDs in project code:
 
 ```csharp
-public class MyLifetimeScope : LifetimeScope
+public static class CameraIds
 {
-    [SerializeField] CameraProfileId _cameraProfileId;
-    System.IDisposable _cameraProfileHandle;
-
-    protected override void Configure(IContainerBuilder builder)
-    {
-        builder.RegisterBuildCallback(container =>
-        {
-            _cameraProfileHandle = container
-                .Resolve<ICameraProfileService>()
-                .Push(_cameraProfileId);
-        });
-    }
-
-    protected override void OnDestroy()
-    {
-        base.OnDestroy();
-        _cameraProfileHandle?.Dispose();
-        _cameraProfileHandle = null;
-    }
+    public static readonly CameraId Game = new("Game");
+    public static readonly CameraId BirdsEye = new("BirdsEye");
 }
 ```
 
-## Tests
+### Scene-resident cameras
 
-`CameraStackResolver` (pure C#) is the testable core. See `Tests/Runtime/CameraStackResolverTests.cs` in this package for:
-- Single slot becomes the Base
-- Lowest-depth slot wins the Base role; all others become overlays sorted by depth
-- Empty input → no Base
-- Multi-profile composition (Root → Root+Gameplay handoff)
+Add `ManagedCamera` to each scene-authored camera and assign its `CameraId` in the Inspector. `ManagedCamera` calls:
 
-`CameraProfileService` integration tests (which need PlayMode) live in the consuming project under `Assets/Tests/PlayMode/Camera/CameraProfileServiceTests.cs` and cover refcount semantics:
-- Push registers cameras + activates the profile
-- Push the same profile twice → cameras created once
-- Pop one of two profiles → keeps the survivor's cameras
-- Two profiles sharing a `CameraId` dedup it (one camera, destroyed when both release)
-- `Dispose` pops all active profiles
+```csharp
+_cameraService.Register(id, camera);   // OnEnable / injection
+_cameraService.Unregister(id);         // OnDisable
+```
+
+The same `CameraId` may have a different URP render type in different scenes. For example, `CameraId.UI` can be a Base camera in a UI-only boot scene and an Overlay camera in gameplay. The framework does not encode Base/Overlay in the ID; it introspects `UniversalAdditionalCameraData.renderType` on the registered camera.
+
+## Service
+
+### `ICameraService`
+
+```csharp
+void Register(CameraId id, Camera camera);
+void Unregister(CameraId id);
+bool TryGetCamera(CameraId id, out Camera camera);
+Camera GetRequiredCamera(CameraId id);
+IReadOnlyCollection<CameraId> GetRegisteredIds();
+
+CameraId ActiveBase { get; }
+event Action<ActiveBaseChangedEvent> ActiveBaseChanged;
+void SetDefaultBase(CameraId id);
+IDisposable PushBase(CameraId id);
+
+IDisposable DisableOverlay(CameraId id);
+```
+
+### Base selection
+
+`SetDefaultBase(id)` sets the bottom of the Base stack. Use it when a scene or scope establishes its normal camera:
+
+```csharp
+// On Game scene scope build:
+_cameraService.SetDefaultBase(CameraIds.Game);
+```
+
+If the ID has not registered yet, the default is queued and applied when that Base camera registers.
+
+`PushBase(id)` temporarily overrides the active Base. It returns a lease; disposing that lease removes only that push. Tokens are handle-based, so disposal order does not matter.
+
+```csharp
+IDisposable _birdsEyeLease;
+
+// During gameplay to switch to birds-eye:
+_birdsEyeLease = _cameraService.PushBase(CameraIds.BirdsEye);
+
+// To switch back:
+_birdsEyeLease.Dispose();
+_birdsEyeLease = null;
+```
+
+This mirrors `IInputLockService`-style temporary ownership: callers keep the lease they created and release it in their own teardown path.
+
+### Overlay disable leases
+
+Overlay cameras are enabled by default and added to the active Base camera's URP `cameraStack`, sorted by camera depth. `DisableOverlay(id)` returns a ref-counted lease that hides an Overlay while any lease is alive:
+
+```csharp
+using var hideWipe = _cameraService.DisableOverlay(CameraId.Wipe);
+```
+
+`DisableOverlay` is for overlays only. Base cameras are controlled with `SetDefaultBase` / `PushBase`.
+
+### Active Base notifications
+
+`ActiveBase` exposes the current Base `CameraId`. Whenever it changes, `CameraService` raises the C# event and publishes MessagePipe `ActiveBaseChangedEvent`:
+
+```csharp
+public readonly struct ActiveBaseChangedEvent
+{
+    public readonly CameraId Previous;
+    public readonly CameraId Current;
+}
+```
+
+Use this for systems that need to react to Game ↔ BirdsEye transitions without polling.
+
+## Lifecycle Walkthrough
+
+Game scene loads:
+
+1. Scene cameras with `ManagedCamera` register `CameraIds.Game`, `CameraIds.BirdsEye`, `CameraId.UI`, `CameraId.UIOverlay`, and `CameraId.Wipe` as they enable.
+2. The scene scope calls `_cameraService.SetDefaultBase(CameraIds.Game)`.
+3. The Game Base is enabled. Registered Overlay cameras are added to Game's URP stack.
+
+Gameplay switches to birds-eye:
+
+```csharp
+_birdsEyeLease = _cameraService.PushBase(CameraIds.BirdsEye);
+```
+
+- `CameraIds.BirdsEye` becomes the active Base.
+- Game remains registered but disabled as a Base.
+- Overlay cameras are re-stacked onto BirdsEye.
+
+Gameplay returns to normal:
+
+```csharp
+_birdsEyeLease.Dispose();
+```
+
+- The BirdsEye push is removed.
+- The default Game Base becomes active again.
+- Overlay cameras are re-stacked onto Game.
+
+## Scene setup checklist
+
+- Author cameras as scene GameObjects.
+- Add `ManagedCamera` to each framework-managed camera.
+- Assign a valid `CameraId`.
+- Set URP `UniversalAdditionalCameraData.renderType` to `Base` or `Overlay` in the scene.
+- Call `SetDefaultBase` from the scene/scope that owns the default Base.
+- Use `PushBase` for temporary overrides such as BirdsEye.
+- Use `DisableOverlay` for scoped overlay suppression.

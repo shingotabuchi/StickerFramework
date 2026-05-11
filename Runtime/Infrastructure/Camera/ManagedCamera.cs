@@ -31,7 +31,7 @@ namespace StickerFwk.Infrastructure.Camera
         {
             if (_isRegistered && _cameraService != null)
             {
-                if (_cameraService.GetCamera(_cameraId) == _camera)
+                if (_cameraService.TryGetCamera(_cameraId, out var registeredCamera) && registeredCamera == _camera)
                 {
                     _cameraService.Unregister(_cameraId);
                 }
@@ -52,7 +52,7 @@ namespace StickerFwk.Infrastructure.Camera
             }
 
             _cameraService.Register(_cameraId, _camera);
-            _isRegistered = _cameraService.GetCamera(_cameraId) == _camera;
+            _isRegistered = _cameraService.TryGetCamera(_cameraId, out var registeredCamera) && registeredCamera == _camera;
         }
     }
 }

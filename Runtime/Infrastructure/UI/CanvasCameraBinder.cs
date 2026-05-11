@@ -12,10 +12,10 @@ namespace StickerFwk.Infrastructure.UI
     /// </summary>
     /// <remarks>
     /// Starts in <see cref="RenderMode.ScreenSpaceOverlay"/> so the canvas is visible
-    /// before any <c>CameraProfile</c> is pushed, then swaps to
+    /// before any Base is pushed, then swaps to
     /// <see cref="RenderMode.ScreenSpaceCamera"/> when the configured
     /// <see cref="CameraId"/> is registered. Reverts to overlay if the camera
-    /// unregisters, and re-binds when it is re-registered (e.g. on profile swaps).
+    /// unregisters, and re-binds when it is re-registered.
     /// Idempotent.
     /// <para>
     /// See <c>Runtime/Infrastructure/UI/README.md</c> §R11 for required scope wiring

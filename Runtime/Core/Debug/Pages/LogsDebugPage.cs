@@ -50,8 +50,62 @@ namespace StickerFwk.Core.Debug.Pages
                 .Toggle("Show Errors", () => _showError, v => { _showError = v; _cachedRevision = -1; })
                 .Button("Clear", Clear)
                 .Button("Copy to clipboard", CopyToClipboard)
-                .Separator()
-                .Label(BuildLogText);
+                .Separator();
+            ((DebugPageBuilder)builder).Custom(RenderEntries);
+        }
+
+        private void RenderEntries(DebugMenuRenderContext ctx)
+        {
+            lock (_lock)
+            {
+                var start = (_head - _count + Capacity) % Capacity;
+                var first = true;
+                for (var i = 0; i < _count; i++)
+                {
+                    var entry = _entries[(start + i) % Capacity];
+                    if (!ShouldShow(entry.Type))
+                    {
+                        continue;
+                    }
+                    if (!first)
+                    {
+                        DrawSeparator(ctx);
+                    }
+                    first = false;
+                    DrawEntry(entry, ctx);
+                }
+            }
+        }
+
+        private static void DrawEntry(Entry entry, DebugMenuRenderContext ctx)
+        {
+            string color;
+            switch (entry.Type)
+            {
+                case LogType.Warning:
+                    color = "#ffff00";
+                    break;
+                case LogType.Error:
+                case LogType.Exception:
+                case LogType.Assert:
+                    color = "#ff0000";
+                    break;
+                default:
+                    color = "#ffffff";
+                    break;
+            }
+            var style = ctx.Styles.Label;
+            var content = new GUIContent("<color=" + color + ">" + entry.Message + "</color>");
+            var rect = GUILayoutUtility.GetRect(content, style, GUILayout.ExpandWidth(true));
+            ctx.Styles.DrawOutlinedLabel(rect, content, style);
+        }
+
+        private static void DrawSeparator(DebugMenuRenderContext ctx)
+        {
+            GUILayout.Space(6f);
+            var rect = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true));
+            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, false, 0f, ctx.Styles.SeparatorColor, 0f, 0f);
+            GUILayout.Space(6f);
         }
 
         private void OnLog(string condition, string stackTrace, LogType type)
@@ -100,7 +154,8 @@ namespace StickerFwk.Core.Debug.Pages
                     {
                         continue;
                     }
-                    AppendEntry(entry);
+                    _stringBuilder.Append(entry.Message);
+                    _stringBuilder.Append('\n');
                 }
                 _cached = _stringBuilder.ToString();
                 _cachedRevision = _revision;
@@ -123,28 +178,6 @@ namespace StickerFwk.Core.Debug.Pages
                 default:
                     return true;
             }
-        }
-
-        private void AppendEntry(Entry entry)
-        {
-            string color;
-            switch (entry.Type)
-            {
-                case LogType.Warning:
-                    color = "#ffcc44";
-                    break;
-                case LogType.Error:
-                case LogType.Exception:
-                case LogType.Assert:
-                    color = "#ff5555";
-                    break;
-                default:
-                    color = "#cccccc";
-                    break;
-            }
-            _stringBuilder.Append("<color=").Append(color).Append(">");
-            _stringBuilder.Append(entry.Message);
-            _stringBuilder.Append("</color>\n");
         }
 
         private struct Entry

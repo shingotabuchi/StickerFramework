@@ -1,4 +1,5 @@
 #if STICKER_DEBUG
+using System.Text;
 using UnityEngine;
 
 namespace StickerFwk.Core.Debug
@@ -292,19 +293,23 @@ namespace StickerFwk.Core.Debug
             var thickness = TextOutlineThickness;
             if (thickness > 0f)
             {
-                ApplyTextColor(drawStyle, TextOutlineColor);
+                var outlineStyle = new GUIStyle(drawStyle) { richText = false };
+                ApplyTextColor(outlineStyle, TextOutlineColor);
+                var outlineContent = content.image != null
+                    ? content
+                    : new GUIContent(StripRichText(content.text), content.tooltip);
                 var wholePixels = Mathf.CeilToInt(thickness);
                 for (var i = 1; i <= wholePixels; i++)
                 {
                     var offset = Mathf.Min(i, thickness);
-                    GUI.Label(new Rect(rect.x - offset, rect.y, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x + offset, rect.y, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x, rect.y - offset, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x, rect.y + offset, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x - offset, rect.y - offset, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x + offset, rect.y - offset, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x - offset, rect.y + offset, rect.width, rect.height), content, drawStyle);
-                    GUI.Label(new Rect(rect.x + offset, rect.y + offset, rect.width, rect.height), content, drawStyle);
+                    GUI.Label(new Rect(rect.x - offset, rect.y, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x + offset, rect.y, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x, rect.y - offset, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x, rect.y + offset, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x - offset, rect.y - offset, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x + offset, rect.y - offset, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x - offset, rect.y + offset, rect.width, rect.height), outlineContent, outlineStyle);
+                    GUI.Label(new Rect(rect.x + offset, rect.y + offset, rect.width, rect.height), outlineContent, outlineStyle);
                 }
             }
 
@@ -324,6 +329,39 @@ namespace StickerFwk.Core.Debug
             tex.SetPixel(0, 0, color);
             tex.Apply();
             return tex;
+        }
+
+        private static string StripRichText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+            if (text.IndexOf('<') < 0)
+            {
+                return text;
+            }
+            var sb = new StringBuilder(text.Length);
+            var inTag = false;
+            for (var i = 0; i < text.Length; i++)
+            {
+                var c = text[i];
+                if (c == '<')
+                {
+                    inTag = true;
+                    continue;
+                }
+                if (c == '>')
+                {
+                    inTag = false;
+                    continue;
+                }
+                if (!inTag)
+                {
+                    sb.Append(c);
+                }
+            }
+            return sb.ToString();
         }
     }
 }

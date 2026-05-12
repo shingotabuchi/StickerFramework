@@ -153,8 +153,12 @@ Downstream projects migrating from the old procedural camera pipeline should:
 
 ### Initialization (`Core/Initialization/`)
 
-- `IRootInitService` — Exposes `UniTask Initialization` for awaiting app startup (applies `RootInitSettings.TargetFrameRate`, loads master data).
-- `RootInitSettings` — ScriptableObject configuring the startup target frame rate. Register via `builder.UseRootInit(settings)`; defaults leave `Application.targetFrameRate` at the platform default (`-1`).
+- `IRootInitService` — Exposes `UniTask Initialization` for awaiting app startup. The orchestrator runs all registered `IInitTask`s in three phases (Bootstrap → Load → Warmup) wrapped by any `IInitObserver`s.
+- `IInitTask` — A single step in the init pipeline. Has a `Phase` (Bootstrap/Load/Warmup) and an `ExecuteAsync(CancellationToken)`. Within a phase: Bootstrap and Warmup run sequentially in registration order; Load runs in parallel via `UniTask.WhenAll`.
+- `IInitObserver` — Cross-cutting hook that wraps the entire pipeline (`OnStartingAsync` before phase 1, `OnCompletedAsync` in `finally` after phase N). Use for input lock / scene-transition guards that must span init.
+- `InitPhase` — Enum: `Bootstrap` (cheap sequential setup), `Load` (parallel I/O), `Warmup` (sequential post-load wiring).
+
+Projects assemble the pipeline by calling extension methods on the `RootLifetimeScope` builder: `UseTargetFrameRate(int)`, `UseMasterDataInit()`, or the generic `AddInitTask<T>()` / `AddInitObserver<T>()`. The `RootInitService` orchestrator is registered automatically on the first such call — no explicit `Use*Pipeline()` line is needed.
 
 ## Design Patterns
 
@@ -162,7 +166,7 @@ Downstream projects migrating from the old procedural camera pipeline should:
 
 All services are registered in a **RootLifetimeScope** and injected via constructors. VContainer lifecycle interfaces:
 - `IStartable` — sync initialization (e.g., UIService creates layer canvases)
-- `IAsyncStartable` — async initialization (e.g., RootInitService loads master data)
+- `IAsyncStartable` — async initialization (e.g., `RootInitService` orchestrates `IInitTask`s)
 - `ITickable` — per-frame updates (e.g., ScreenService checks resolution changes)
 - `IDisposable` — cleanup
 

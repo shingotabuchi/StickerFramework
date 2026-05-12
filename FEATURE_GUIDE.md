@@ -527,10 +527,13 @@ public class RootLifetimeScope : LifetimeScope
         // Master Data
         builder.Register<IMasterDataRepository, MasterDataRepository>(Lifetime.Singleton);
 
-        // Initialization
-        // Pass a RootInitSettings asset to override Application.targetFrameRate at startup;
-        // omit the argument to leave Unity's platform default in place.
-        builder.UseRootInit(/* rootInitSettingsAsset */);
+        // Initialization — pipeline is registered automatically the first time you add a task.
+        // Each Use*/AddInit* call is independent; mix and match what your project needs.
+        builder.UseTargetFrameRate(60);   // Bootstrap phase: sets Application.targetFrameRate
+        builder.UseMasterDataInit();      // Load phase: loads IMasterDataRepository
+        // builder.AddInitTask<MyCueSheetLoadTask>();   // Project-defined Load-phase task
+        // builder.AddInitTask<MyRepoInitTask>();       // Project-defined Warmup-phase task
+        // builder.AddInitObserver<MyLoadingGuard>();   // Wraps the whole pipeline (e.g., input lock)
 
         // Rendering
         builder.Register<IBlurService, BlurService>(Lifetime.Singleton);

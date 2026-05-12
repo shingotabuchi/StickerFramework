@@ -71,7 +71,7 @@ Packages/com.stickerfwk.core/
 | `AssetManagement/` | `IAssetRequester` | Async asset loading contract |
 | `Camera/` | `ICameraService`, `CameraId`, `CameraFitter`, `CameraExtensions` | Camera registration and query contracts |
 | `Diagnostics/` | `Assert`, `Log` | Debug assertion and logging wrappers |
-| `Initialization/` | `IRootInitService`, `RootInitSettings` | App startup contract and configuration asset |
+| `Initialization/` | `IRootInitService`, `IInitTask`, `IInitObserver`, `InitPhase` | App startup contracts: handshake, pipeline step, lifecycle hook, phase enum |
 | `Input/` | `IInputService`, `IRawInputService`, `IInputLockService`, `InputLockService`, `InputLockChangedEvent` | Input abstraction with ref-counted locking |
 | `InspectorTools/` | `ButtonAttribute` | Custom inspector attributes |
 | `Lifetime/` | `IScopeCancellation`, `ICancellationHandle`, `ScopeCancellation`, `UseScopeCancellation` | LifetimeScope-bound cancellation for presenters and scoped services |
@@ -90,9 +90,9 @@ Packages/com.stickerfwk.core/
 |---|---|---|
 | `AssetManagement/` | `AddressableCache`, `AddressableHandle<T>`, `AddressableManager`, `IAddressableHandle` | Addressables-backed asset loading |
 | `Camera/` | `CameraService`, `CameraModel`, `ManagedCamera`, `CameraRegisteredEvent` | Camera registry implementation |
-| `Initialization/` | `RootInitService`, `RootInitContainerBuilderExtensions` | Startup sequence (frame rate from `RootInitSettings`, master data) |
+| `Initialization/` | `RootInitService`, `InitContainerBuilderExtensions`, `TargetFrameRateInitTask` | Pipeline orchestrator + `AddInitTask`/`AddInitObserver`/`UseTargetFrameRate` extensions |
 | `Input/` | `InputService`, `LockingInputService`, `WorldRaycastService` | Input System wrappers |
-| `MasterData/` | `MasterDataRepository` | Addressables-backed master data loading |
+| `MasterData/` | `MasterDataRepository`, `MasterDataInitTask` | Addressables-backed master data loading + `UseMasterDataInit()` task |
 | `Rendering/` | `BlurService`, `BlurVolume`, `ManagedBlurVolume`, `DualKawaseBlurFeature`, `DualKawaseBlurPass`, `CachedBlurBlitPass` | URP dual-Kawase blur pipeline |
 | `SceneManagement/` | `SceneTransitionService` | Scene loading with transition overlay |
 | `Time/` | `TimeService`, `FeatureTimeService` | Frame time and per-feature time scaling |

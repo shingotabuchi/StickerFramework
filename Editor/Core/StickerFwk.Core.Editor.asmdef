@@ -3,7 +3,8 @@
     "rootNamespace": "StickerFwk.Core.Editor",
     "references": [
         "StickerFwk.Core",
-        "Unity.Addressables.Editor"
+        "Unity.Addressables.Editor",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [
         "Editor"

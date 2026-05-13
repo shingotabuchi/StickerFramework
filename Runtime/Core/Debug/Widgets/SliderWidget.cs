@@ -16,7 +16,8 @@ namespace StickerFwk.Core.Debug
 
         public override void Render(DebugMenuRenderContext ctx)
         {
-            var current = Get();
+            var stored = Get();
+            var current = stored;
             var controlName = $"debug-slider-value-{Text}";
             var hasFocus = GUI.GetNameOfFocusedControl() == controlName;
             if (!hasFocus)
@@ -50,7 +51,7 @@ namespace StickerFwk.Core.Debug
             var next = DrawCenteredSlider(sliderRect, current, Min, Max, ctx);
             GUILayout.EndVertical();
             GUILayout.Space(SliderBottomMargin);
-            if (!Mathf.Approximately(next, current))
+            if (!Mathf.Approximately(next, stored))
             {
                 Set(next);
             }

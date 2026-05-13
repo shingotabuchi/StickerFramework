@@ -1,3 +1,4 @@
+using System;
 using StickerFwk.Core;
 
 namespace StickerFwk.Infrastructure.Time
@@ -5,6 +6,9 @@ namespace StickerFwk.Infrastructure.Time
     public class FeatureTimeService : ITimeService
     {
         private readonly TimeService _rootTime;
+        private float _localTimeScale = 1f;
+
+        public event Action<float> LocalTimeScaleChanged;
 
         public FeatureTimeService(TimeService rootTime)
         {
@@ -23,7 +27,21 @@ namespace StickerFwk.Infrastructure.Time
             set => _rootTime.TimeScale = value;
         }
 
-        public float LocalTimeScale { get; set; } = 1f;
+        public float LocalTimeScale
+        {
+            get => _localTimeScale;
+            set
+            {
+                if (_localTimeScale == value)
+                {
+                    return;
+                }
+
+                _localTimeScale = value;
+                LocalTimeScaleChanged?.Invoke(value);
+            }
+        }
+
         public int FrameCount => _rootTime.FrameCount;
     }
 }

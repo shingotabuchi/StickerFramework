@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using StickerFwk.Core;
 using StickerFwk.Core.UI;
 using UnityEngine.SceneManagement;
+using VContainer;
 
 namespace StickerFwk.Infrastructure.SceneManagement
 {
@@ -13,6 +14,7 @@ namespace StickerFwk.Infrastructure.SceneManagement
         readonly IInputLockService _inputLockService;
         readonly SceneReadyNotifier _sceneReadyNotifier;
 
+        [Inject]
         public SceneTransitionService(
             IScreenTransitionService screenTransitionService,
             IInputLockService inputLockService,

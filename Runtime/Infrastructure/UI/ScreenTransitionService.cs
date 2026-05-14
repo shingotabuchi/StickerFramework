@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using StickerFwk.Core.UI;
+using VContainer;
 
 namespace StickerFwk.Infrastructure.UI
 {
@@ -11,6 +12,7 @@ namespace StickerFwk.Infrastructure.UI
 
         readonly IUIService _uiService;
 
+        [Inject]
         public ScreenTransitionService(IUIService uiService)
         {
             _uiService = uiService;

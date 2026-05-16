@@ -11,15 +11,18 @@ namespace StickerFwk.Infrastructure.Camera
     {
         readonly CameraModel _model;
         readonly IPublisher<ActiveBaseChangedEvent> _publisher;
+        readonly IPublisher<CameraRegisteredEvent> _cameraRegisteredPublisher;
 
         public event Action<ActiveBaseChangedEvent> ActiveBaseChanged;
 
         public CameraService(
             CameraModel model,
-            IPublisher<ActiveBaseChangedEvent> publisher)
+            IPublisher<ActiveBaseChangedEvent> publisher,
+            IPublisher<CameraRegisteredEvent> cameraRegisteredPublisher)
         {
             _model = model;
             _publisher = publisher;
+            _cameraRegisteredPublisher = cameraRegisteredPublisher;
         }
 
         public CameraId ActiveBase => _model.ActiveBase;
@@ -52,6 +55,7 @@ namespace StickerFwk.Infrastructure.Camera
             }
 
             Recompute();
+            _cameraRegisteredPublisher?.Publish(new CameraRegisteredEvent(id, true));
             PublishActiveBaseChanged(previous, ActiveBase);
         }
 
@@ -66,6 +70,7 @@ namespace StickerFwk.Infrastructure.Camera
             }
 
             Recompute();
+            _cameraRegisteredPublisher?.Publish(new CameraRegisteredEvent(id, false));
             PublishActiveBaseChanged(previous, ActiveBase);
         }
 

@@ -20,6 +20,10 @@ namespace StickerFwk.Infrastructure.Rendering
         public NoInterpClampedFloatParameter noiseStrength = new NoInterpClampedFloatParameter(0f, 0f, 32f);
         public NoInterpClampedFloatParameter noiseScale = new NoInterpClampedFloatParameter(80f, 1f, 512f);
         public NoInterpFloatParameter noiseSeed = new NoInterpFloatParameter(0f);
+        public NoInterpClampedFloatParameter reflectionStrength = new NoInterpClampedFloatParameter(0f, 0f, 2f);
+        public NoInterpClampedFloatParameter reflectionRoughness = new NoInterpClampedFloatParameter(0.35f, 0.02f, 1f);
+        public NoInterpClampedFloatParameter reflectionNormalStrength = new NoInterpClampedFloatParameter(1f, 0f, 8f);
+        public NoInterpVector3Parameter reflectionLightDirection = new NoInterpVector3Parameter(new Vector3(-0.35f, 0.55f, 0.75f));
         public RenderPassEventParameter injectionPoint = new RenderPassEventParameter(RenderPassEvent.AfterRenderingTransparents);
         public BoolParameter manualUpdate = new BoolParameter(false, overrideState: true);
         [HideInInspector] public NoInterpIntParameter cacheVersion = new NoInterpIntParameter(0, overrideState: true);
@@ -50,6 +54,15 @@ namespace StickerFwk.Infrastructure.Rendering
     public sealed class FrostedBlurNoiseTypeParameter : VolumeParameter<FrostedBlurNoiseType>
     {
         public FrostedBlurNoiseTypeParameter(FrostedBlurNoiseType value, bool overrideState = false)
+            : base(value, overrideState)
+        {
+        }
+    }
+
+    [Serializable]
+    public sealed class NoInterpVector3Parameter : VolumeParameter<Vector3>
+    {
+        public NoInterpVector3Parameter(Vector3 value, bool overrideState = false)
             : base(value, overrideState)
         {
         }

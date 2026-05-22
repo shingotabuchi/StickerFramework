@@ -93,6 +93,10 @@ namespace StickerFwk.Infrastructure.Rendering
                 blur.iterations.value,
                 blur.offset.value,
                 blur.downsample.value,
+                blur.noiseType.value,
+                blur.noiseStrength.value,
+                blur.noiseScale.value,
+                blur.noiseSeed.value,
                 isManual ? _cachedBlur : null);
 
             renderer.EnqueuePass(_pass);

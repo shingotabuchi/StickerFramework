@@ -97,10 +97,6 @@ namespace StickerFwk.Infrastructure.Rendering
                 blur.noiseStrength.value,
                 blur.noiseScale.value,
                 blur.noiseSeed.value,
-                blur.reflectionStrength.value,
-                blur.reflectionRoughness.value,
-                blur.reflectionNormalStrength.value,
-                blur.reflectionLightDirection.value,
                 isManual ? _cachedBlur : null);
 
             renderer.EnqueuePass(_pass);

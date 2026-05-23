@@ -12,10 +12,6 @@ namespace StickerFwk.Infrastructure.Rendering
         private static readonly int FrostedNoiseStrengthId = Shader.PropertyToID("_FrostedNoiseStrength");
         private static readonly int FrostedNoiseScaleId = Shader.PropertyToID("_FrostedNoiseScale");
         private static readonly int FrostedNoiseSeedId = Shader.PropertyToID("_FrostedNoiseSeed");
-        private static readonly int ReflectionStrengthId = Shader.PropertyToID("_ReflectionStrength");
-        private static readonly int ReflectionRoughnessId = Shader.PropertyToID("_ReflectionRoughness");
-        private static readonly int ReflectionNormalStrengthId = Shader.PropertyToID("_ReflectionNormalStrength");
-        private static readonly int ReflectionLightDirectionId = Shader.PropertyToID("_ReflectionLightDirection");
         private static readonly string[] DownTextureNames =
         {
             "_BlurDown0",
@@ -75,10 +71,6 @@ namespace StickerFwk.Infrastructure.Rendering
         private float _noiseStrength;
         private float _noiseScale;
         private float _noiseSeed;
-        private float _reflectionStrength;
-        private float _reflectionRoughness;
-        private float _reflectionNormalStrength;
-        private Vector3 _reflectionLightDirection;
         private RTHandle _cacheTarget;
 
         public DualKawaseBlurPass(Material material, int maxIterations)
@@ -90,8 +82,6 @@ namespace StickerFwk.Infrastructure.Rendering
 
         public void Setup(float intensity, int iterations, float offset, int downsample,
             FrostedBlurNoiseType noiseType, float noiseStrength, float noiseScale, float noiseSeed,
-            float reflectionStrength, float reflectionRoughness, float reflectionNormalStrength,
-            Vector3 reflectionLightDirection,
             RTHandle cacheTarget = null)
         {
             _iterations = Mathf.Min(iterations, _maxIterations);
@@ -101,10 +91,6 @@ namespace StickerFwk.Infrastructure.Rendering
             _noiseStrength = noiseStrength * intensity;
             _noiseScale = noiseScale;
             _noiseSeed = noiseSeed;
-            _reflectionStrength = reflectionStrength * intensity;
-            _reflectionRoughness = reflectionRoughness;
-            _reflectionNormalStrength = reflectionNormalStrength;
-            _reflectionLightDirection = reflectionLightDirection;
             _cacheTarget = cacheTarget;
         }
 
@@ -135,10 +121,6 @@ namespace StickerFwk.Infrastructure.Rendering
             _material.SetFloat(FrostedNoiseStrengthId, _noiseStrength);
             _material.SetFloat(FrostedNoiseScaleId, _noiseScale);
             _material.SetFloat(FrostedNoiseSeedId, _noiseSeed);
-            _material.SetFloat(ReflectionStrengthId, _reflectionStrength);
-            _material.SetFloat(ReflectionRoughnessId, _reflectionRoughness);
-            _material.SetFloat(ReflectionNormalStrengthId, _reflectionNormalStrength);
-            _material.SetVector(ReflectionLightDirectionId, _reflectionLightDirection);
 
             var baseDesc = renderGraph.GetTextureDesc(cameraColor);
             baseDesc.depthBufferBits = 0;

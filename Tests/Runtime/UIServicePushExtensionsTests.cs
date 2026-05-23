@@ -180,6 +180,33 @@ namespace StickerFwk.Tests.Runtime
         }
 
         [Test]
+        public async Task Push_WipeLayer_UsesWipeUnityLayerForCanvasBlockerAndWindowHierarchy()
+        {
+            var wipeLayer = LayerMask.NameToLayer("Wipe");
+            Assert.That(wipeLayer, Is.GreaterThanOrEqualTo(0));
+
+            var prefab = MakePrefab<PlainHandleView>(UILayer.Wipe);
+            var child = new GameObject("Child", typeof(RectTransform));
+            child.transform.SetParent(prefab.transform, false);
+
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/PlainHandleView.prefab", prefab);
+            var service = NewService(requester);
+            var options = AutoCompleteOptions();
+            options.IsBlocking = true;
+
+            var view = await service.Push<PlainHandleView>(options: options).AsTask();
+            var layerRoot = view.transform.parent;
+            var blocker = layerRoot.Find("InputBlocker");
+
+            Assert.That(blocker, Is.Not.Null);
+            Assert.That(layerRoot.gameObject.layer, Is.EqualTo(wipeLayer));
+            Assert.That(blocker.gameObject.layer, Is.EqualTo(wipeLayer));
+            Assert.That(view.gameObject.layer, Is.EqualTo(wipeLayer));
+            Assert.That(view.transform.GetChild(0).gameObject.layer, Is.EqualTo(wipeLayer));
+        }
+
+        [Test]
         public async Task ScopedUIService_TracksAllPushExtensionVariantsAndPopsOnDispose()
         {
             var objects = new List<GameObject>();

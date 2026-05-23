@@ -8,8 +8,7 @@ namespace StickerFwk.Infrastructure.Camera
 {
     public sealed class WipeCameraService : IWipeCameraService, IDisposable
     {
-        const int WipeLayer = 8;
-        const int UiLayer = 5;
+        const string WipeLayerName = "Wipe";
         const float WipeCameraDepth = 1000f;
         const float NearClipPlane = 0.01f;
         const float FarClipPlane = 10f;
@@ -69,6 +68,13 @@ namespace StickerFwk.Infrastructure.Camera
                     $"Camera '{CameraId.Wipe}' is already registered. The wipe camera must be owned by {nameof(WipeCameraService)}.");
             }
 
+            var wipeLayer = LayerMask.NameToLayer(WipeLayerName);
+            if (wipeLayer < 0)
+            {
+                throw new InvalidOperationException($"Unity layer '{WipeLayerName}' is not defined.");
+            }
+            var wipeLayerMask = 1 << wipeLayer;
+
             _root = new GameObject("[CameraSystem] Wipe Camera");
             if (Application.isPlaying)
             {
@@ -82,13 +88,14 @@ namespace StickerFwk.Infrastructure.Camera
             _camera.nearClipPlane = NearClipPlane;
             _camera.farClipPlane = FarClipPlane;
             _camera.depth = WipeCameraDepth;
-            // Layer 8 is the NotebookWipe visual rig; layer 5 is Unity's UI layer for UILayer.Wipe.
-            _camera.cullingMask = (1 << WipeLayer) | (1 << UiLayer);
+            _camera.cullingMask = wipeLayerMask;
             _camera.allowHDR = true;
             _camera.allowMSAA = true;
 
             var urpCameraData = _root.AddComponent<UniversalAdditionalCameraData>();
             urpCameraData.renderType = CameraRenderType.Overlay;
+            urpCameraData.renderPostProcessing = true;
+            urpCameraData.volumeLayerMask = wipeLayerMask;
 
             _cameraService.Register(CameraId.Wipe, _camera);
             _idleDisableLease = _cameraService.DisableOverlay(CameraId.Wipe);

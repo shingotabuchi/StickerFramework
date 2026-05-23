@@ -16,10 +16,6 @@ namespace StickerFwk.Infrastructure.Rendering
         public NoInterpClampedIntParameter iterations = new NoInterpClampedIntParameter(4, 1, 8);
         public NoInterpClampedFloatParameter offset = new NoInterpClampedFloatParameter(1.5f, 0f, 4f);
         public NoInterpClampedIntParameter downsample = new NoInterpClampedIntParameter(1, 0, 4);
-        public FrostedBlurNoiseTypeParameter noiseType = new FrostedBlurNoiseTypeParameter(FrostedBlurNoiseType.None);
-        public NoInterpClampedFloatParameter noiseStrength = new NoInterpClampedFloatParameter(0f, 0f, 32f);
-        public NoInterpClampedFloatParameter noiseScale = new NoInterpClampedFloatParameter(80f, 1f, 512f);
-        public NoInterpFloatParameter noiseSeed = new NoInterpFloatParameter(0f);
         public RenderPassEventParameter injectionPoint = new RenderPassEventParameter(RenderPassEvent.AfterRenderingTransparents);
         public BoolParameter manualUpdate = new BoolParameter(false, overrideState: true);
         [HideInInspector] public NoInterpIntParameter cacheVersion = new NoInterpIntParameter(0, overrideState: true);
@@ -34,24 +30,6 @@ namespace StickerFwk.Infrastructure.Rendering
         public bool IsActive()
         {
             return enabled.value && intensity.value > 0f && iterations.value > 0;
-        }
-    }
-
-    public enum FrostedBlurNoiseType
-    {
-        None = 0,
-        Value = 1,
-        Perlin = 2,
-        FbmValue = 3,
-        FbmPerlin = 4
-    }
-
-    [Serializable]
-    public sealed class FrostedBlurNoiseTypeParameter : VolumeParameter<FrostedBlurNoiseType>
-    {
-        public FrostedBlurNoiseTypeParameter(FrostedBlurNoiseType value, bool overrideState = false)
-            : base(value, overrideState)
-        {
         }
     }
 

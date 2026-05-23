@@ -11,6 +11,10 @@ namespace StickerFwk.Infrastructure.UI
         {
             var blocker = new GameObject("InputBlocker");
             blocker.transform.SetParent(parent, false);
+            if (parent != null)
+            {
+                blocker.layer = parent.gameObject.layer;
+            }
 
             var rect = blocker.AddComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;

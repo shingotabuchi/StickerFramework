@@ -80,15 +80,15 @@ namespace StickerFwk.Infrastructure.Rendering
             _downTextures = new TextureHandle[maxIterations];
         }
 
-        public void Setup(float intensity, int iterations, float offset, int downsample,
+        public void Setup(int iterations, float offset, int downsample,
             FrostedBlurNoiseType noiseType, float noiseStrength, float noiseScale, float noiseSeed,
             RTHandle cacheTarget = null)
         {
             _iterations = Mathf.Min(iterations, _maxIterations);
-            _offset = offset * intensity;
+            _offset = offset;
             _downsample = downsample;
             _noiseType = noiseType;
-            _noiseStrength = noiseStrength * intensity;
+            _noiseStrength = noiseStrength;
             _noiseScale = noiseScale;
             _noiseSeed = noiseSeed;
             _cacheTarget = cacheTarget;

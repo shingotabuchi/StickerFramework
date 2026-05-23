@@ -93,7 +93,7 @@ Packages/com.stickerfwk.core/
 | `Initialization/` | `RootInitService`, `InitContainerBuilderExtensions`, `TargetFrameRateInitTask` | Pipeline orchestrator + `AddInitTask`/`AddInitObserver`/`UseTargetFrameRate` extensions |
 | `Input/` | `InputService`, `LockingInputService`, `WorldRaycastService` | Input System wrappers |
 | `MasterData/` | `MasterDataRepository`, `MasterDataInitTask` | Addressables-backed master data loading + `UseMasterDataInit()` task |
-| `Rendering/` | `BlurService`, `BlurVolume`, `ManagedBlurVolume`, `DualKawaseBlurFeature`, `DualKawaseBlurPass`, `CachedBlurBlitPass` | URP dual-Kawase blur pipeline |
+| `Rendering/` | `BlurService`, `BlurVolume`, `FrostedBlurNoiseVolume`, `ManagedBlurVolume`, `DualKawaseBlurFeature`, `DualKawaseBlurPass`, `CachedBlurBlitPass` | URP dual-Kawase blur pipeline |
 | `SceneManagement/` | `SceneTransitionService` | Scene loading with transition overlay |
 | `Time/` | `TimeService`, `FeatureTimeService` | Frame time and per-feature time scaling |
 | `Timeline/` | `LoopTrack`, `LoopTrackComponent`, `LoopClipAsset`, `LoopClipBehaviour`, `LoopClipMixerBehaviour` | Custom Timeline looping track |

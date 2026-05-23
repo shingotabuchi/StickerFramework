@@ -22,6 +22,8 @@ namespace StickerFwk.Core
         [SerializeField] private bool _useCameraAspect = true;
         [Tooltip("Content aspect ratio (width / height) used when 'Use Camera Aspect' is off. The quad is scaled to cover the view at this aspect.")]
         [SerializeField] private float _aspect = 16f / 9f;
+        [Tooltip("Apply immediately when this component is enabled. Disable when another component coordinates camera-dependent applies.")]
+        [SerializeField] private bool _applyOnEnable = true;
 
         public Camera Camera
         {
@@ -41,9 +43,18 @@ namespace StickerFwk.Core
             set { _aspect = value; Apply(); }
         }
 
+        public bool ApplyOnEnable
+        {
+            get => _applyOnEnable;
+            set => _applyOnEnable = value;
+        }
+
         private void OnEnable()
         {
-            Apply();
+            if (_applyOnEnable)
+            {
+                Apply();
+            }
         }
 
         [ContextMenu("Apply")]

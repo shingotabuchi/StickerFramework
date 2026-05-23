@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace StickerFwk.Infrastructure.Camera
+namespace StickerFwk.Core
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(UnityEngine.Camera))]

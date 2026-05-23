@@ -4,6 +4,15 @@
 
 The framework camera system no longer creates cameras procedurally. Cameras are authored in scenes as normal Unity `Camera` GameObjects and opt into the framework with `ManagedCamera`.
 
+## Core vs Infrastructure split
+
+The camera code is split across two assemblies by **dependency**, not by "is it a MonoBehaviour":
+
+- **`Runtime/Core/Camera/` (`StickerFwk.Core`)** — camera contracts and value types (`ICameraService`, `CameraId`, events), plus **self-contained authoring components that depend only on `UnityEngine` (+ `RenderPipelines.Core`)** and do not implement/require `CameraService`: `CameraFitter`, `CameraBoxFovFitter`, `CameraBackgroundQuad`, `CameraFovLerper`. These just pose/scale a `Transform` or set a single `Camera` property.
+- **`Runtime/Infrastructure/Camera/` (`StickerFwk.Infrastructure.Camera`)** — the **URP-dependent service stack**: `CameraService`, `CameraModel`, and `ManagedCamera`. Anything touching `UniversalAdditionalCameraData`, the URP `cameraStack`, or implementing `ICameraService` lives here.
+
+Rule of thumb: if a camera component needs URP (`Universal.Runtime`) or the camera service, it belongs in Infrastructure; otherwise it is a Core authoring helper.
+
 The activation model is intentionally small:
 
 - Scene cameras register by `CameraId` when enabled and unregister when disabled.

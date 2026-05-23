@@ -26,10 +26,17 @@ namespace StickerFwk.Infrastructure.Camera
             _cameraService = cameraService;
         }
 
+        public UnityEngine.Camera EnsureCamera()
+        {
+            ThrowIfDisposed();
+            EnsureCameraCreated();
+            return _camera;
+        }
+
         public IWipeCameraLease Acquire()
         {
             ThrowIfDisposed();
-            EnsureCamera();
+            EnsureCameraCreated();
 
             if (_leaseCount == 0)
             {
@@ -55,7 +62,7 @@ namespace StickerFwk.Infrastructure.Camera
             }
         }
 
-        void EnsureCamera()
+        void EnsureCameraCreated()
         {
             if (_camera != null)
             {
@@ -97,8 +104,11 @@ namespace StickerFwk.Infrastructure.Camera
             urpCameraData.renderPostProcessing = true;
             urpCameraData.volumeLayerMask = wipeLayerMask;
 
-            _cameraService.Register(CameraId.Wipe, _camera);
+            // Pre-disable BEFORE Register so the Recompute triggered by Register never briefly
+            // inserts the wipe overlay into the active base's camera stack (which would otherwise
+            // expose a one-frame window where the wipe renders with no transform / director setup).
             _idleDisableLease = _cameraService.DisableOverlay(CameraId.Wipe);
+            _cameraService.Register(CameraId.Wipe, _camera);
         }
 
         void ThrowIfDisposed()

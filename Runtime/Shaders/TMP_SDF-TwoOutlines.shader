@@ -124,6 +124,7 @@ SubShader {
         #pragma shader_feature __ BEVEL_ON
         #pragma shader_feature __ UNDERLAY_ON UNDERLAY_INNER
         #pragma shader_feature __ GLOW_ON
+        #pragma shader_feature __ OUTLINE_ON
 
         #pragma multi_compile __ UNITY_UI_CLIP_RECT
         #pragma multi_compile __ UNITY_UI_ALPHACLIP
@@ -222,28 +223,42 @@ SubShader {
         }
 
         // Two-outline variant of the standard TMP GetColor.
-        // d is the (signed) distance from the glyph edge in screen units after scaling
-        // (positive means outside the face). outline1 is the inner outline width and
-        // outline2 is the additional outer outline width that extends past outline1.
+        //  - Outline 1 uses the IDENTICAL math as a stock TMP single-outline of width
+        //    outline1, so its appearance is independent of outline2.
+        //  - Outline 2 is composited on top as a separate band that sits outside
+        //    outline 1: it only extends the glyph outward and never affects the
+        //    outline 1 region.
         fixed4 GetColorTwoOutline(half d, fixed4 faceColor, fixed4 outlineColor, fixed4 outline2Color,
                                   half outline1, half outline2, half softness)
         {
-            half totalOutline = outline1 + outline2;
-            half faceAlpha = 1 - saturate((d - totalOutline * 0.5 + softness * 0.5) / (1.0 + softness));
-
-            // First outline blends in starting at the face edge, like the stock TMP shader.
+            // ---- Stock TMP single-outline (outline1 only) ----
+            half faceAlpha = 1 - saturate((d - outline1 * 0.5 + softness * 0.5) / (1.0 + softness));
             half outline1Alpha = saturate(d + outline1 * 0.5) * sqrt(min(1.0, outline1));
-            // Second outline only kicks in once we move past the first outline band.
-            half outline2Alpha = saturate(d - outline1 * 0.5 + outline2 * 0.5) * sqrt(min(1.0, outline2));
 
             faceColor.rgb *= faceColor.a;
             outlineColor.rgb *= outlineColor.a;
             outline2Color.rgb *= outline2Color.a;
 
             fixed4 col = lerp(faceColor, outlineColor, outline1Alpha);
-            col = lerp(col, outline2Color, outline2Alpha);
-
             col *= faceAlpha;
+
+            #if OUTLINE_ON
+            // ---- Outline 2: separate band drawn outside outline 1 ----
+            // Band spans d in [outline1*0.5, outline1*0.5 + outline2]. We use a hat-shape
+            // alpha (ramp in on the inner side, ramp out on the outer side using softness)
+            // so the band has natural pixel-wide anti-aliasing on both edges and fades
+            // gracefully when outline2 is sub-pixel. Composited as an underlay so it never
+            // touches the outline 1 region.
+            half o2Inner = outline1 * 0.5;
+            half o2Outer = outline1 * 0.5 + outline2;
+            half o2In  = saturate(d - o2Inner);
+            half o2Out = 1 - saturate((d - o2Outer + softness * 0.5) / (1.0 + softness));
+            half outline2Layer = min(o2In, o2Out);
+
+            col.rgb += outline2Color.rgb * outline2Layer * (1 - col.a);
+            col.a   += outline2Color.a   * outline2Layer * (1 - col.a);
+            #endif
+
             return col;
         }
 
@@ -362,7 +377,11 @@ SubShader {
 
             // Account for both outline widths so the quad fragments aren't clipped before
             // the second outline can be rendered.
-            float totalOutline = (_OutlineWidth + _Outline2Width) * _ScaleRatioA;
+            float outline2Contribution = 0.0;
+            #if OUTLINE_ON
+            outline2Contribution = _Outline2Width;
+            #endif
+            float totalOutline = (_OutlineWidth + outline2Contribution) * _ScaleRatioA;
             float alphaClip = (1.0 - totalOutline - _OutlineSoftness * _ScaleRatioA);
 
             #if GLOW_ON

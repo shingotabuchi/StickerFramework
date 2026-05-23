@@ -39,6 +39,8 @@ namespace StickerFwk.Tests.Runtime
             public int AcquireCount { get; private set; }
             public int DisposeCount { get; private set; }
 
+            public Camera EnsureCamera() => null;
+
             public IWipeCameraLease Acquire()
             {
                 AcquireCount++;

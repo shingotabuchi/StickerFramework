@@ -35,6 +35,15 @@ namespace StickerFwk.Infrastructure.Camera
                 throw new ArgumentNullException(nameof(camera));
             }
 
+            if (id == CameraId.Wipe
+                && _model.TryGet(id, out var existingCamera)
+                && existingCamera != null
+                && existingCamera != camera)
+            {
+                throw new InvalidOperationException(
+                    $"Camera '{id}' is already registered. CameraId.Wipe is owned by WipeCameraService; remove duplicate scene or prefab registrations.");
+            }
+
             Log.Info($"Registering camera '{id}' with game object '{camera.gameObject.name}'.");
 
             var previous = ActiveBase;

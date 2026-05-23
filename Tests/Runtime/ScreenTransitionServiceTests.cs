@@ -2,8 +2,11 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using StickerFwk.Core;
 using StickerFwk.Core.UI;
 using StickerFwk.Infrastructure.UI;
+using UnityEngine;
+using Assert = NUnit.Framework.Assert;
 
 namespace StickerFwk.Tests.Runtime
 {
@@ -13,7 +16,8 @@ namespace StickerFwk.Tests.Runtime
         public void ExecuteAsync_PopsOverlayWhenActionIsCanceled()
         {
             var uiService = new FakeUIService();
-            var service = new ScreenTransitionService(uiService);
+            var wipeCameraService = new FakeWipeCameraService();
+            var service = new ScreenTransitionService(uiService, wipeCameraService);
             using var cts = new CancellationTokenSource();
 
             Assert.CatchAsync<OperationCanceledException>(async () =>
@@ -26,6 +30,44 @@ namespace StickerFwk.Tests.Runtime
             Assert.That(uiService.PushCount, Is.EqualTo(1));
             Assert.That(uiService.PopGenericCount, Is.EqualTo(1));
             Assert.That(uiService.PopGenericTokenWasCanceled, Is.False);
+            Assert.That(wipeCameraService.AcquireCount, Is.EqualTo(1));
+            Assert.That(wipeCameraService.DisposeCount, Is.EqualTo(1));
+        }
+
+        sealed class FakeWipeCameraService : IWipeCameraService
+        {
+            public int AcquireCount { get; private set; }
+            public int DisposeCount { get; private set; }
+
+            public IWipeCameraLease Acquire()
+            {
+                AcquireCount++;
+                return new Lease(this);
+            }
+
+            sealed class Lease : IWipeCameraLease
+            {
+                readonly FakeWipeCameraService _owner;
+                bool _disposed;
+
+                public Lease(FakeWipeCameraService owner)
+                {
+                    _owner = owner;
+                }
+
+                public Camera Camera => null;
+
+                public void Dispose()
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    _disposed = true;
+                    _owner.DisposeCount++;
+                }
+            }
         }
 
         sealed class FakeUIService : IUIService

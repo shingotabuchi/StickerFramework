@@ -52,7 +52,7 @@ Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Co
 `UI`, `UIOverlay`, and `Wipe` are the only camera IDs reserved by the framework. Projects may define any additional IDs in project code, for example `CameraIds.Game` or `CameraIds.BirdsEye`.
 
 - Windows specify which layer they belong to via the `Layer` field on `WindowView` (default `UILayer.UI`).
-- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — place a scene-resident camera with `ManagedCamera` for that ID before pushing the window.
+- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — place a scene-resident camera with `ManagedCamera` for scene-owned IDs, and register `WipeCameraService` for `CameraId.Wipe`.
 - Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match by default — override via `UICanvasOptions`), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
 - `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that replace scene-resident UI cameras).
 
@@ -176,7 +176,7 @@ Runtime overrides can be passed via a `WindowOptions` object when calling `UISer
 
 | Concern | Where |
 |---|---|
-| Register a scene camera for the target `CameraId` | `ManagedCamera` on the camera GameObject |
+| Register a scene camera for the target `CameraId` | `ManagedCamera` on the camera GameObject (`CameraId.Wipe` is provided by `WipeCameraService`) |
 | Auto-install `IInstaller` MonoBehaviours on a scope | Scope inherits from `StickerLifetimeScope` |
 | Auto-inject scene-authored binders | `builder.RegisterComponentInHierarchy<CanvasCameraBinder>()` in `ConfigureScope` |
 | Provide `ICameraService` + `ISubscriber<CameraRegisteredEvent>` | Registered in `RootLifetimeScope` (parent scope) |

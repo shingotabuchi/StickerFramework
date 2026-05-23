@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using StickerFwk.Core;
 using StickerFwk.Core.UI;
 using VContainer;
 
@@ -11,11 +12,15 @@ namespace StickerFwk.Infrastructure.UI
         private static readonly IProgress<float> NoProgress = new NullProgress();
 
         readonly IUIService _uiService;
+        readonly IWipeCameraService _wipeCameraService;
 
         [Inject]
-        public ScreenTransitionService(IUIService uiService)
+        public ScreenTransitionService(
+            IUIService uiService,
+            IWipeCameraService wipeCameraService)
         {
             _uiService = uiService;
+            _wipeCameraService = wipeCameraService;
         }
 
         public async UniTask ExecuteAsync(
@@ -42,23 +47,38 @@ namespace StickerFwk.Infrastructure.UI
                 throw new ArgumentNullException(nameof(action));
             }
 
-            var view = await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
-            var progress = view is IScreenTransitionProgressSink sink
-                ? new ScreenTransitionProgress(sink)
-                : NoProgress;
-            progress.Report(0f);
+            var cameraLease = _wipeCameraService.Acquire();
+            var didPush = false;
 
             try
             {
+                var view = await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
+                didPush = true;
+
+                var progress = view is IScreenTransitionProgressSink sink
+                    ? new ScreenTransitionProgress(sink)
+                    : NoProgress;
+                progress.Report(0f);
+
                 // 2. Run the caller's action while screen is covered
                 await action(progress, ct);
                 progress.Report(1f);
             }
             finally
             {
-                // 3. Pop overlay — awaits hide transition to reveal. Use an uncancelled
-                // caller token so a cancelled load does not leave the overlay stuck.
-                await _uiService.Pop<ScreenTransitionView>(CancellationToken.None);
+                try
+                {
+                    if (didPush)
+                    {
+                        // 3. Pop overlay — awaits hide transition to reveal. Use an uncancelled
+                        // caller token so a cancelled load does not leave the overlay stuck.
+                        await _uiService.Pop<ScreenTransitionView>(CancellationToken.None);
+                    }
+                }
+                finally
+                {
+                    cameraLease.Dispose();
+                }
             }
         }
 

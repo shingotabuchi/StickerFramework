@@ -61,6 +61,69 @@ namespace StickerFwk.Core
             set => _applyOnEnable = value;
         }
 
+        /// <summary>
+        /// Returns the vertical field of view required to fit the provided box
+        /// size, or NaN if the current camera setup cannot produce a valid
+        /// result. Does not modify the serialized box size or the camera's
+        /// field of view.
+        /// </summary>
+        public float GetFovForBoxSize(Vector3 boxSize)
+        {
+            return TryGetFovForBoxSize(boxSize, out var fov) ? fov : float.NaN;
+        }
+
+        /// <summary>
+        /// Calculates the vertical field of view required to fit the provided
+        /// box size using this fitter's current camera, transform, box center,
+        /// padding, and FOV clamp settings. Does not modify the serialized box
+        /// size or the camera's field of view.
+        /// </summary>
+        public bool TryGetFovForBoxSize(Vector3 boxSize, out float fov)
+        {
+            return TryGetFovForBox(_boxCenter, boxSize, out fov);
+        }
+
+        /// <summary>
+        /// Calculates the vertical field of view required to fit the provided
+        /// box using this fitter's current camera, transform, padding, and FOV
+        /// clamp settings. Does not modify the serialized box or the camera's
+        /// field of view.
+        /// </summary>
+        public bool TryGetFovForBox(Vector3 boxCenter, Vector3 boxSize, out float fov)
+        {
+            fov = 0f;
+
+            if (_camera == null || _camera.orthographic)
+            {
+                return false;
+            }
+
+            var aspect = _camera.aspect;
+            if (aspect <= 0f)
+            {
+                return false;
+            }
+
+            var camTransform = _camera.transform;
+            var camPos = camTransform.position;
+            var right = camTransform.right;
+            var up = camTransform.up;
+            var forward = camTransform.forward;
+
+            FillWorldCorners(_corners, boxCenter, boxSize);
+
+            if (!TryGetMaxHalfFovTangent(_corners, camPos, right, up, forward, aspect, out var maxTan))
+            {
+                return false;
+            }
+
+            maxTan *= Mathf.Max(0.0001f, _paddingScale);
+
+            fov = 2f * Mathf.Atan(maxTan) * Mathf.Rad2Deg;
+            fov = Mathf.Clamp(fov, _minFov, _maxFov);
+            return true;
+        }
+
         [Inject]
         public void Construct(ISubscriber<ScreenChangedEvent> subscriber)
         {
@@ -92,32 +155,28 @@ namespace StickerFwk.Core
         [ContextMenu("Apply")]
         public void Apply()
         {
-            if (_camera == null || _camera.orthographic)
+            if (TryGetFovForBox(_boxCenter, _boxSize, out var fov))
             {
-                return;
+                _camera.fieldOfView = fov;
             }
+        }
 
-            var aspect = _camera.aspect;
-            if (aspect <= 0f)
-            {
-                return;
-            }
-
-            var camTransform = _camera.transform;
-            var camPos = camTransform.position;
-            var right = camTransform.right;
-            var up = camTransform.up;
-            var forward = camTransform.forward;
-
-            FillWorldCorners(_corners);
-
+        private static bool TryGetMaxHalfFovTangent(
+            Vector3[] corners,
+            Vector3 camPos,
+            Vector3 right,
+            Vector3 up,
+            Vector3 forward,
+            float aspect,
+            out float maxTan)
+        {
             // Find the largest vertical half-FOV tangent required by any corner.
             // Vertical:   |y| <= z * tan(vHalf)
             // Horizontal: |x| <= z * tan(vHalf) * aspect  (Unity FOV is vertical)
-            var maxTan = 0f;
-            for (var i = 0; i < _corners.Length; i++)
+            maxTan = 0f;
+            for (var i = 0; i < corners.Length; i++)
             {
-                var v = _corners[i] - camPos;
+                var v = corners[i] - camPos;
                 var z = Vector3.Dot(v, forward);
                 if (z <= 0.0001f)
                 {
@@ -137,20 +196,12 @@ namespace StickerFwk.Core
                 }
             }
 
-            if (maxTan <= 0f)
-            {
-                return;
-            }
-
-            maxTan *= Mathf.Max(0.0001f, _paddingScale);
-
-            var fov = 2f * Mathf.Atan(maxTan) * Mathf.Rad2Deg;
-            _camera.fieldOfView = Mathf.Clamp(fov, _minFov, _maxFov);
+            return maxTan > 0f;
         }
 
-        private void FillWorldCorners(Vector3[] buffer)
+        private void FillWorldCorners(Vector3[] buffer, Vector3 boxCenter, Vector3 boxSize)
         {
-            var half = _boxSize * 0.5f;
+            var half = boxSize * 0.5f;
             var index = 0;
             for (var sx = -1; sx <= 1; sx += 2)
             {
@@ -158,7 +209,7 @@ namespace StickerFwk.Core
                 {
                     for (var sz = -1; sz <= 1; sz += 2)
                     {
-                        var local = _boxCenter + new Vector3(sx * half.x, sy * half.y, sz * half.z);
+                        var local = boxCenter + new Vector3(sx * half.x, sy * half.y, sz * half.z);
                         buffer[index++] = transform.TransformPoint(local);
                     }
                 }

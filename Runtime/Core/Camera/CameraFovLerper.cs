@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace StickerFwk.Core
 {
+    [ExecuteAlways]
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(UnityEngine.Camera))]
     public class CameraFovLerper : MonoBehaviour
     {
         [SerializeField] UnityEngine.Camera _camera;
@@ -32,7 +32,11 @@ namespace StickerFwk.Core
 
         void Reset()
         {
-            _camera = GetComponent<UnityEngine.Camera>();
+            if (_camera == null)
+            {
+                _camera = GetComponent<UnityEngine.Camera>();
+            }
+
             if (_camera != null)
             {
                 _startFov = _camera.fieldOfView;
@@ -41,12 +45,19 @@ namespace StickerFwk.Core
 
         void Awake()
         {
+            Apply(_time);
+        }
+
+        void OnEnable()
+        {
             EnsureCamera();
             Apply(_time);
         }
 
         void OnValidate()
         {
+            EnsureCamera();
+
             _startFov = Mathf.Max(0.01f, _startFov);
             _endFov = Mathf.Max(0.01f, _endFov);
             _time = Mathf.Clamp01(_time);
@@ -59,7 +70,7 @@ namespace StickerFwk.Core
             Apply(_time);
         }
 
-        void OnDidApplyAnimationProperties()
+        public void OnDidApplyAnimationProperties()
         {
             Apply(_time);
         }
@@ -72,7 +83,11 @@ namespace StickerFwk.Core
 
         public void SetFov(float fov)
         {
-            EnsureCamera();
+            if (_camera == null)
+            {
+                return;
+            }
+
             _camera.fieldOfView = Mathf.Max(0.01f, fov);
         }
 
@@ -85,7 +100,10 @@ namespace StickerFwk.Core
 
         void Apply(float normalizedTime)
         {
-            EnsureCamera();
+            if (_camera == null)
+            {
+                return;
+            }
 
             var t = Mathf.Clamp01(normalizedTime);
             var eased = _curve == null ? t : _curve.Evaluate(t);

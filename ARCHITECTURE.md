@@ -140,7 +140,7 @@ Downstream projects migrating from the old procedural camera pipeline should:
 ### Scene Management (`Core/`)
 
 - `ISceneTransitionService` — Locks input, covers screen with transition overlay, loads scene, waits for ready signal, reveals.
-- `SceneReadyNotifier` — Completion source. Scene code calls `NotifyReady()` when initialization is done.
+- `SceneReadyNotifier` — Completion source. Scene code MUST call `NotifyReady()` when initialization is done. **Any scene reachable as a transition target must call it**: `ISceneTransitionService` awaits it after loading and before revealing, so a scene that never signals leaves the transition stuck (screen concealed, wipe never opens). The boot scene is exempt only because it loads directly, not via a transition.
 
 ### Scope Lifetime (`Core/Lifetime/`)
 

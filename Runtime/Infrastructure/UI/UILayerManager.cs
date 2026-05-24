@@ -10,6 +10,9 @@ namespace StickerFwk.Infrastructure.UI
 {
     public class UILayerManager : IDisposable
     {
+        const string UiLayerName = "UI";
+        const string WipeLayerName = "Wipe";
+
         readonly ICameraService _cameraService;
         readonly ISubscriber<CameraRegisteredEvent> _cameraRegisteredSubscriber;
         readonly UICanvasOptions _canvasOptions;
@@ -139,10 +142,10 @@ namespace StickerFwk.Infrastructure.UI
         {
             var go = new GameObject($"UILayer_{layer}");
             go.transform.SetParent(_root.transform, false);
-            var uiLayerIndex = LayerMask.NameToLayer("UI");
-            if (uiLayerIndex >= 0)
+            var layerIndex = GetUnityLayerIndex(layer);
+            if (layerIndex >= 0)
             {
-                go.layer = uiLayerIndex;
+                go.layer = layerIndex;
             }
 
             var canvas = go.AddComponent<Canvas>();
@@ -168,6 +171,20 @@ namespace StickerFwk.Infrastructure.UI
             go.AddComponent<GraphicRaycaster>();
 
             return canvas;
+        }
+
+        static int GetUnityLayerIndex(UILayer layer)
+        {
+            switch (layer)
+            {
+                case UILayer.Wipe:
+                    return LayerMask.NameToLayer(WipeLayerName);
+                case UILayer.UI:
+                case UILayer.UIOverlay:
+                    return LayerMask.NameToLayer(UiLayerName);
+                default:
+                    return -1;
+            }
         }
 
         public Transform GetLayerTransform(UILayer layer)
@@ -199,6 +216,5 @@ namespace StickerFwk.Infrastructure.UI
         }
     }
 }
-
 
 

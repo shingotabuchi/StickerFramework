@@ -548,6 +548,10 @@ namespace StickerFwk.Infrastructure.UI
                 }
 
                 instance = Object.Instantiate(windowAsset.Prefab, layerTransform);
+                if (layer == UILayer.Wipe)
+                {
+                    SetLayerRecursively(instance, layerTransform.gameObject.layer);
+                }
 
                 // Hide the freshly-instantiated window until the show transition begins.
                 // OnInitialize may await async work (e.g. Addressables loads); without this,
@@ -881,6 +885,17 @@ namespace StickerFwk.Infrastructure.UI
             if (_disposed)
             {
                 throw new ObjectDisposedException(nameof(UIService));
+            }
+        }
+
+        static void SetLayerRecursively(GameObject gameObject, int layer)
+        {
+            gameObject.layer = layer;
+
+            var transform = gameObject.transform;
+            for (var i = 0; i < transform.childCount; i++)
+            {
+                SetLayerRecursively(transform.GetChild(i).gameObject, layer);
             }
         }
     }

@@ -13,16 +13,19 @@ namespace StickerFwk.Infrastructure.SceneManagement
         readonly IScreenTransitionService _screenTransitionService;
         readonly IInputLockService _inputLockService;
         readonly SceneReadyNotifier _sceneReadyNotifier;
+        readonly SceneRevealedNotifier _sceneRevealedNotifier;
 
         [Inject]
         public SceneTransitionService(
             IScreenTransitionService screenTransitionService,
             IInputLockService inputLockService,
-            SceneReadyNotifier sceneReadyNotifier)
+            SceneReadyNotifier sceneReadyNotifier,
+            SceneRevealedNotifier sceneRevealedNotifier)
         {
             _screenTransitionService = screenTransitionService;
             _inputLockService = inputLockService;
             _sceneReadyNotifier = sceneReadyNotifier;
+            _sceneRevealedNotifier = sceneRevealedNotifier;
         }
 
         public async UniTask TransitionToSceneAsync(
@@ -33,20 +36,28 @@ namespace StickerFwk.Infrastructure.SceneManagement
         {
             using var _ = _inputLockService.Lock();
 
-            await _screenTransitionService.ExecuteAsync(async innerCt =>
+            _sceneRevealedNotifier.Reset();
+            try
             {
-                if (beforeLoad != null)
+                await _screenTransitionService.ExecuteAsync(async innerCt =>
                 {
-                    await beforeLoad(innerCt);
-                }
+                    if (beforeLoad != null)
+                    {
+                        await beforeLoad(innerCt);
+                    }
 
-                _sceneReadyNotifier.Reset();
-                await SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single)
-                    .ToUniTask(cancellationToken: innerCt);
-                await _sceneReadyNotifier.WaitForReady(innerCt);
-            },
-            transitionViewTag,
-            ct);
+                    _sceneReadyNotifier.Reset();
+                    await SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single)
+                        .ToUniTask(cancellationToken: innerCt);
+                    await _sceneReadyNotifier.WaitForReady(innerCt);
+                },
+                transitionViewTag,
+                ct);
+            }
+            finally
+            {
+                _sceneRevealedNotifier.NotifyRevealed();
+            }
         }
     }
 }

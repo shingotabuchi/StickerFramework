@@ -169,7 +169,10 @@ namespace StickerFwk.Tests.Runtime
                 token.ThrowIfCancellationRequested();
             }, options: AutoCompleteOptions(), ct: cts.Token).AsTask();
 
-            Assert.CatchAsync<OperationCanceledException>(async () => await pushTask);
+            OperationCanceledException caught = null;
+            try { await pushTask; }
+            catch (OperationCanceledException ex) { caught = ex; }
+            Assert.That(caught, Is.Not.Null, "PushPrepared must surface cancellation.");
             await UniTask.Yield();
             await UniTask.Yield();
 

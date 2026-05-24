@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using StickerFwk.Core.Initialization;
@@ -46,7 +47,9 @@ namespace StickerFwk.Tests.Runtime
         {
             var builder = new ContainerBuilder();
             builder.AddInitTask(new RecordingTask(InitPhase.Bootstrap));
-            builder.AddInitTask(new RecordingTask(InitPhase.Load));
+            // Distinct concrete type — VContainer collection registrations require unique
+            // implementation types per contract.
+            builder.AddInitTask(new SecondRecordingTask(InitPhase.Load));
             builder.AddInitObserver(new RecordingObserver());
 
             using var container = builder.Build();
@@ -62,7 +65,7 @@ namespace StickerFwk.Tests.Runtime
         }
 
         [Test]
-        public void StartAsync_RunsTasksInPhaseOrder_BootstrapLoadWarmup()
+        public async Task StartAsync_RunsTasksInPhaseOrder_BootstrapLoadWarmup()
         {
             var log = new List<string>();
             var bootstrap = new RecordingTask(InitPhase.Bootstrap, log, "boot");
@@ -74,7 +77,7 @@ namespace StickerFwk.Tests.Runtime
                 new IInitTask[] { warmup, load1, bootstrap, load2 },
                 Array.Empty<IInitObserver>());
 
-            service.StartAsync(CancellationToken.None).AsTask().GetAwaiter().GetResult();
+            await service.StartAsync(CancellationToken.None).AsTask();
 
             Assert.AreEqual("boot", log[0], "Bootstrap must run first.");
             Assert.AreEqual("warm", log[3], "Warmup must run last.");
@@ -107,15 +110,17 @@ namespace StickerFwk.Tests.Runtime
         }
 
         [Test]
-        public void Observers_StartBeforeAndCompleteAfter_EvenOnFailure()
+        public async Task Observers_StartBeforeAndCompleteAfter_EvenOnFailure()
         {
             var log = new List<string>();
             var observer = new RecordingObserver(log);
             var failing = new RecordingTask(InitPhase.Bootstrap, throwOnExecute: new InvalidOperationException("fail"));
             var service = new RootInitService(new[] { failing }, new IInitObserver[] { observer });
 
-            try { service.StartAsync(CancellationToken.None).AsTask().GetAwaiter().GetResult(); }
+            try { await service.StartAsync(CancellationToken.None).AsTask(); }
             catch (InvalidOperationException) { /* expected */ }
+            try { await service.Initialization.AsTask(); }
+            catch (InvalidOperationException) { /* observe to avoid unhandled UniTask exception */ }
 
             Assert.AreEqual("starting", log[0]);
             Assert.AreEqual("completed", log[^1]);
@@ -168,6 +173,13 @@ namespace StickerFwk.Tests.Runtime
                 if (_throw != null) throw _throw;
                 if (_log != null && _name != null) _log.Add(_name);
             }
+        }
+
+        private sealed class SecondRecordingTask : IInitTask
+        {
+            public InitPhase Phase { get; }
+            public SecondRecordingTask(InitPhase phase) => Phase = phase;
+            public UniTask ExecuteAsync(CancellationToken ct) => UniTask.CompletedTask;
         }
 
         private sealed class RecordingObserver : IInitObserver

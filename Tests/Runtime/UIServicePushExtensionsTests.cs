@@ -253,7 +253,8 @@ namespace StickerFwk.Tests.Runtime
                 cameraService,
                 cameraRegisteredSubscriber: null,
                 new FakePublisher<WindowOpenedEvent>(),
-                new FakePublisher<WindowClosedEvent>());
+                new FakePublisher<WindowClosedEvent>(),
+                inputLockService: null);
             service.Start();
             _services.Add(service);
             return service;

@@ -1,5 +1,5 @@
 using System;
-using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace StickerFwk.Core.Presentation
 {
@@ -18,7 +18,7 @@ namespace StickerFwk.Core.Presentation
         }
 
         /// <summary>
-        /// Pointer source backed by UnityEngine.Input mouse button 0 and first touch.
+        /// Pointer source backed by the active Input System pointer.
         /// </summary>
         public static PresentationPointerInput UnityDefault { get; } = new(
             IsUnityPointerPressed,
@@ -51,21 +51,14 @@ namespace StickerFwk.Core.Presentation
 
         static bool WasUnityPointerPressedThisFrame()
         {
-            if (Input.touchCount > 0)
-            {
-                var touch = Input.GetTouch(0);
-                if (touch.phase == TouchPhase.Began)
-                {
-                    return true;
-                }
-            }
-
-            return Input.GetMouseButtonDown(0);
+            var pointer = Pointer.current;
+            return pointer != null && pointer.press.wasPressedThisFrame;
         }
 
         static bool IsUnityPointerPressed()
         {
-            return Input.touchCount > 0 || Input.GetMouseButton(0);
+            var pointer = Pointer.current;
+            return pointer != null && pointer.press.isPressed;
         }
     }
 }

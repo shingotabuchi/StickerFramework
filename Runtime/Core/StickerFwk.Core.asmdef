@@ -6,6 +6,7 @@
         "R3.Unity",
         "VContainer",
         "MessagePipe",
+        "Unity.InputSystem",
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.Splines",
         "Unity.Mathematics"

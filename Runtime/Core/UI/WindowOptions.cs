@@ -6,6 +6,7 @@ namespace StickerFwk.Core.UI
     public class WindowOptions
     {
         public bool? IsBlocking { get; set; }
+        public bool LockInputDuringPush { get; set; }
         public ITransition ShowTransition { get; set; }
         public ITransition HideTransition { get; set; }
         public float? TransitionDuration { get; set; }

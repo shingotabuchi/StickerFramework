@@ -128,6 +128,32 @@ namespace StickerFwk.Tests.Runtime
         }
 
         [Test]
+        public async Task PushWithInputLockOptionLocksUntilPushCompletes()
+        {
+            var prefab = MakePrefab<TestWindowViewA>(UILayer.UI);
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/TestWindowViewA.prefab", prefab);
+            var inputLockService = new FakeInputLockService();
+            var service = NewService(requester, inputLockService);
+            var show = new ControllableTransition("show");
+            var options = NewOptions(show);
+            options.LockInputDuringPush = true;
+
+            var pushTask = service.Push<TestWindowViewA>(options: options).AsTask();
+
+            await show.WaitForPlayAsync();
+
+            Assert.That(inputLockService.IsLocked, Is.True);
+            Assert.That(inputLockService.LockCount, Is.EqualTo(1));
+
+            show.Complete();
+            await pushTask;
+
+            Assert.That(inputLockService.IsLocked, Is.False);
+            Assert.That(inputLockService.LockCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public async Task ReplaceIsAtomicAgainstConcurrentPushOnSameLayer()
         {
             var prefabA = MakePrefab<TestWindowViewA>(UILayer.UI);
@@ -312,7 +338,7 @@ namespace StickerFwk.Tests.Runtime
 
         // ---------- Helpers ----------
 
-        UIService NewService(FakeAssetRequester requester)
+        UIService NewService(FakeAssetRequester requester, IInputLockService inputLockService = null)
         {
             var cameraService = new FakeCameraService(_camera);
             var service = new UIService(
@@ -321,7 +347,8 @@ namespace StickerFwk.Tests.Runtime
                 cameraService,
                 cameraRegisteredSubscriber: null,
                 new FakePublisher<WindowOpenedEvent>(),
-                new FakePublisher<WindowClosedEvent>());
+                new FakePublisher<WindowClosedEvent>(),
+                inputLockService);
             service.Start();
             _services.Add(service);
             return service;
@@ -528,6 +555,39 @@ namespace StickerFwk.Tests.Runtime
         sealed class FakePublisher<T> : IPublisher<T>
         {
             public void Publish(T message) { }
+        }
+
+        sealed class FakeInputLockService : IInputLockService
+        {
+            public int LockCount { get; private set; }
+            public bool IsLocked => LockCount > 0;
+
+            public IDisposable Lock()
+            {
+                LockCount++;
+                return new LockHandle(this);
+            }
+
+            sealed class LockHandle : IDisposable
+            {
+                FakeInputLockService _owner;
+
+                public LockHandle(FakeInputLockService owner)
+                {
+                    _owner = owner;
+                }
+
+                public void Dispose()
+                {
+                    if (_owner == null)
+                    {
+                        return;
+                    }
+
+                    _owner.LockCount--;
+                    _owner = null;
+                }
+            }
         }
     }
 }

@@ -22,6 +22,7 @@ namespace StickerFwk.Infrastructure.UI
         private readonly WindowAssetResolver _windowAssetResolver;
         private readonly WindowLifecycleRunner _windowLifecycleRunner = new();
         private readonly IObjectResolver _resolver;
+        private readonly IInputLockService _inputLockService;
         private readonly Dictionary<UILayer, Stack<WindowHandle>> _stacks;
         private readonly IPublisher<WindowClosedEvent> _windowClosedPublisher;
         private readonly IPublisher<WindowOpenedEvent> _windowOpenedPublisher;
@@ -48,7 +49,8 @@ namespace StickerFwk.Infrastructure.UI
             ICameraService cameraService,
             ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
-            IPublisher<WindowClosedEvent> windowClosedPublisher)
+            IPublisher<WindowClosedEvent> windowClosedPublisher,
+            IInputLockService inputLockService)
             : this(
                 assetRequester,
                 resolver,
@@ -57,27 +59,8 @@ namespace StickerFwk.Infrastructure.UI
                 windowOpenedPublisher,
                 windowClosedPublisher,
                 resolver?.ResolveOrDefault<WindowAssetKeyOptions>(),
-                resolver?.ResolveOrDefault<UICanvasOptions>())
-        {
-        }
-
-        public UIService(
-            IAssetRequester assetRequester,
-            IObjectResolver resolver,
-            ICameraService cameraService,
-            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
-            IPublisher<WindowOpenedEvent> windowOpenedPublisher,
-            IPublisher<WindowClosedEvent> windowClosedPublisher,
-            WindowAssetKeyOptions keyOptions)
-            : this(
-                assetRequester,
-                resolver,
-                cameraService,
-                cameraRegisteredSubscriber,
-                windowOpenedPublisher,
-                windowClosedPublisher,
-                keyOptions,
-                null)
+                resolver?.ResolveOrDefault<UICanvasOptions>(),
+                inputLockService)
         {
         }
 
@@ -89,10 +72,34 @@ namespace StickerFwk.Infrastructure.UI
             IPublisher<WindowOpenedEvent> windowOpenedPublisher,
             IPublisher<WindowClosedEvent> windowClosedPublisher,
             WindowAssetKeyOptions keyOptions,
-            UICanvasOptions canvasOptions)
+            IInputLockService inputLockService = null)
+            : this(
+                assetRequester,
+                resolver,
+                cameraService,
+                cameraRegisteredSubscriber,
+                windowOpenedPublisher,
+                windowClosedPublisher,
+                keyOptions,
+                null,
+                inputLockService)
+        {
+        }
+
+        public UIService(
+            IAssetRequester assetRequester,
+            IObjectResolver resolver,
+            ICameraService cameraService,
+            ISubscriber<CameraRegisteredEvent> cameraRegisteredSubscriber,
+            IPublisher<WindowOpenedEvent> windowOpenedPublisher,
+            IPublisher<WindowClosedEvent> windowClosedPublisher,
+            WindowAssetKeyOptions keyOptions,
+            UICanvasOptions canvasOptions,
+            IInputLockService inputLockService = null)
         {
             _assetRequester = assetRequester;
             _resolver = resolver;
+            _inputLockService = inputLockService;
             _windowOpenedPublisher = windowOpenedPublisher;
             _windowClosedPublisher = windowClosedPublisher;
             _windowAssetResolver = new WindowAssetResolver(assetRequester);
@@ -205,6 +212,7 @@ namespace StickerFwk.Infrastructure.UI
         {
             ThrowIfDisposed();
             var key = BuildKey<T>(tag);
+            using var inputLock = AcquirePushInputLock(options);
 
             using var linkedCts = LinkToken(ct);
             var linkedCt = linkedCts.Token;
@@ -348,6 +356,7 @@ namespace StickerFwk.Infrastructure.UI
         {
             ThrowIfDisposed();
             var key = BuildKey<T>(tag);
+            using var inputLock = AcquirePushInputLock(options);
 
             using var linkedCts = LinkToken(ct);
             var linkedCt = linkedCts.Token;
@@ -874,6 +883,22 @@ namespace StickerFwk.Infrastructure.UI
         CancellationTokenSource LinkToken(CancellationToken ct)
         {
             return CancellationTokenSource.CreateLinkedTokenSource(ct, _disposeCts.Token);
+        }
+
+        IDisposable AcquirePushInputLock(WindowOptions options)
+        {
+            if (options?.LockInputDuringPush != true)
+            {
+                return null;
+            }
+
+            if (_inputLockService == null)
+            {
+                Log.Warning("UIService", "WindowOptions.LockInputDuringPush was requested, but no IInputLockService is available.");
+                return null;
+            }
+
+            return _inputLockService.Lock();
         }
 
         void ThrowIfDisposed()

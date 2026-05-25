@@ -2,7 +2,19 @@
 
 > Status: current. Documents scene-resident camera registration and base/overlay stack control. Kept in sync with code in `Runtime/Core/Camera/` and `Runtime/Infrastructure/Camera/`.
 
-The framework camera system no longer creates cameras procedurally. Cameras are authored in scenes as normal Unity `Camera` GameObjects and opt into the framework with `ManagedCamera`.
+The framework camera system uses authored Unity `Camera` GameObjects that opt in with
+`ManagedCamera`. Scene cameras normally serialize a stable `CameraId`; self-contained runtime
+prefabs (such as screen-transition rigs) may leave the ID empty so `ManagedCamera` generates a
+unique anonymous ID for that instance.
+
+## Core vs Infrastructure split
+
+The camera code is split across two assemblies by **dependency**, not by "is it a MonoBehaviour":
+
+- **`Runtime/Core/Camera/` (`StickerFwk.Core`)** — camera contracts and value types (`ICameraService`, `CameraId`, events), plus **self-contained authoring components that depend only on `UnityEngine` (+ `RenderPipelines.Core`)** and do not implement/require `CameraService`: `CameraFitter`, `CameraBoxFovFitter`, and `CameraBackgroundQuad`. These just pose/scale a `Transform` or set a single `Camera` property.
+- **`Runtime/Infrastructure/Camera/` (`StickerFwk.Infrastructure.Camera`)** — the **URP-dependent service stack**: `CameraService`, `CameraModel`, and `ManagedCamera`. Anything touching `UniversalAdditionalCameraData`, the URP `cameraStack`, or implementing `ICameraService` lives here.
+
+Rule of thumb: if a camera component needs URP (`Universal.Runtime`) or the camera service, it belongs in Infrastructure; otherwise it is a Core authoring helper.
 
 The activation model is intentionally small:
 
@@ -10,6 +22,7 @@ The activation model is intentionally small:
 - The active Base camera is selected by `SetDefaultBase` plus scoped `PushBase` leases.
 - Overlay cameras are enabled by default and can be temporarily hidden with ref-counted `DisableOverlay` leases.
 - URP Base/Overlay role is read from each camera's `UniversalAdditionalCameraData.renderType` at registration time.
+- `ManagedCamera` generates a unique anonymous ID when its serialized `CameraId` is empty; this is intended for runtime-instantiated overlay prefabs that must not collide.
 
 ## Concepts
 
@@ -22,13 +35,14 @@ The activation model is intentionally small:
 public readonly struct CameraId : IEquatable<CameraId>
 ```
 
-The framework reserves only three static slots:
+The framework reserves only two static slots:
 
 | ID | Purpose |
 |---|---|
 | `CameraId.UI` | Standard UI layer camera |
 | `CameraId.UIOverlay` | UI that must render above the main UI camera |
-| `CameraId.Wipe` | Full-screen scene-transition wipes |
+
+Leave a `ManagedCamera` ID empty on runtime-instantiated overlay prefabs to get a per-instance anonymous ID.
 
 Projects define additional IDs in project code:
 
@@ -81,6 +95,13 @@ IDisposable PushBase(CameraId id);
 IDisposable DisableOverlay(CameraId id);
 ```
 
+### Screen-transition cameras
+
+Screen transitions are self-contained prefabs loaded by `IScreenTransitionService`. Author a child
+URP Overlay camera with `ManagedCamera` and leave its serialized `CameraId` empty; each instantiated
+rig receives a unique anonymous ID and is stacked by `CameraService` like any other overlay. The
+prefab also owns its Canvas, lens, culling mask, post-processing, and any transition visuals.
+
 ### Base selection
 
 `SetDefaultBase(id)` sets the bottom of the Base stack. Use it when a scene or scope establishes its normal camera:
@@ -112,7 +133,7 @@ This mirrors `IInputLockService`-style temporary ownership: callers keep the lea
 Overlay cameras are enabled by default and added to the active Base camera's URP `cameraStack`, sorted by camera depth. `DisableOverlay(id)` returns a ref-counted lease that hides an Overlay while any lease is alive:
 
 ```csharp
-using var hideWipe = _cameraService.DisableOverlay(CameraId.Wipe);
+using var hideOverlay = _cameraService.DisableOverlay(CameraId.UIOverlay);
 ```
 
 `DisableOverlay` is for overlays only. Base cameras are controlled with `SetDefaultBase` / `PushBase`.
@@ -135,7 +156,7 @@ Use this for systems that need to react to Game ↔ BirdsEye transitions without
 
 Game scene loads:
 
-1. Scene cameras with `ManagedCamera` register `CameraIds.Game`, `CameraIds.BirdsEye`, `CameraId.UI`, `CameraId.UIOverlay`, and `CameraId.Wipe` as they enable.
+1. Scene cameras with `ManagedCamera` register `CameraIds.Game`, `CameraIds.BirdsEye`, `CameraId.UI`, and `CameraId.UIOverlay` as they enable. Runtime transition rigs register anonymous overlay IDs while they are instantiated.
 2. The scene scope calls `_cameraService.SetDefaultBase(CameraIds.Game)`.
 3. The Game Base is enabled. Registered Overlay cameras are added to Game's URP stack.
 
@@ -164,6 +185,7 @@ _birdsEyeLease.Dispose();
 - Author cameras as scene GameObjects.
 - Add `ManagedCamera` to each framework-managed camera.
 - Assign a valid `CameraId`.
+- For runtime-only overlay prefabs, leave `ManagedCamera`'s `CameraId` empty to use an anonymous per-instance ID.
 - Set URP `UniversalAdditionalCameraData.renderType` to `Base` or `Overlay` in the scene.
 - Call `SetDefaultBase` from the scene/scope that owns the default Base.
 - Use `PushBase` for temporary overrides such as BirdsEye.

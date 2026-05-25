@@ -169,7 +169,10 @@ namespace StickerFwk.Tests.Runtime
                 token.ThrowIfCancellationRequested();
             }, options: AutoCompleteOptions(), ct: cts.Token).AsTask();
 
-            Assert.CatchAsync<OperationCanceledException>(async () => await pushTask);
+            OperationCanceledException caught = null;
+            try { await pushTask; }
+            catch (OperationCanceledException ex) { caught = ex; }
+            Assert.That(caught, Is.Not.Null, "PushPrepared must surface cancellation.");
             await UniTask.Yield();
             await UniTask.Yield();
 
@@ -177,6 +180,33 @@ namespace StickerFwk.Tests.Runtime
             Assert.That(captured == null || captured.gameObject == null, Is.True,
                 "cancelled prepared push should destroy the instantiated GameObject");
             Assert.That(requester.AssetHandle("Views/PreparedView.prefab").DisposeCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Push_UILayer_KeepsAuthoredWindowHierarchyLayer()
+        {
+            var uiLayer = LayerMask.NameToLayer("UI");
+            Assert.That(uiLayer, Is.GreaterThanOrEqualTo(0));
+
+            var prefab = MakePrefab<PlainHandleView>(UILayer.UI);
+            var child = new GameObject("Child", typeof(RectTransform));
+            child.transform.SetParent(prefab.transform, false);
+
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/PlainHandleView.prefab", prefab);
+            var service = NewService(requester);
+            var options = AutoCompleteOptions();
+            options.IsBlocking = true;
+
+            var view = await service.Push<PlainHandleView>(options: options).AsTask();
+            var layerRoot = view.transform.parent;
+            var blocker = layerRoot.Find("InputBlocker");
+
+            Assert.That(blocker, Is.Not.Null);
+            Assert.That(layerRoot.gameObject.layer, Is.EqualTo(uiLayer));
+            Assert.That(blocker.gameObject.layer, Is.EqualTo(uiLayer));
+            Assert.That(view.gameObject.layer, Is.EqualTo(prefab.layer));
+            Assert.That(view.transform.GetChild(0).gameObject.layer, Is.EqualTo(child.layer));
         }
 
         [Test]

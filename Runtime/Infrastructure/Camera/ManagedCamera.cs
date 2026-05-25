@@ -1,3 +1,4 @@
+using System;
 using StickerFwk.Core;
 using UnityEngine;
 using VContainer;
@@ -11,9 +12,10 @@ namespace StickerFwk.Infrastructure.Camera
 
         ICameraService _cameraService;
         UnityEngine.Camera _camera;
+        CameraId _effectiveId;
         bool _isRegistered;
 
-        public CameraId CameraId => _cameraId;
+        public CameraId CameraId => GetEffectiveId();
 
         [Inject]
         public void Construct(ICameraService cameraService)
@@ -25,15 +27,17 @@ namespace StickerFwk.Infrastructure.Camera
         void Awake()
         {
             _camera = GetComponent<UnityEngine.Camera>();
+            GetEffectiveId();
         }
 
         void OnDisable()
         {
             if (_isRegistered && _cameraService != null)
             {
-                if (_cameraService.TryGetCamera(_cameraId, out var registeredCamera) && registeredCamera == _camera)
+                var id = GetEffectiveId();
+                if (_cameraService.TryGetCamera(id, out var registeredCamera) && registeredCamera == _camera)
                 {
-                    _cameraService.Unregister(_cameraId);
+                    _cameraService.Unregister(id);
                 }
                 _isRegistered = false;
             }
@@ -44,15 +48,36 @@ namespace StickerFwk.Infrastructure.Camera
             TryRegister();
         }
 
+        CameraId GetEffectiveId()
+        {
+            if (_cameraId.IsValid)
+            {
+                return _cameraId;
+            }
+
+            if (!_effectiveId.IsValid)
+            {
+                _effectiveId = new CameraId($"anon:{Guid.NewGuid():N}");
+            }
+
+            return _effectiveId;
+        }
+
         void TryRegister()
         {
+            if (_camera == null)
+            {
+                _camera = GetComponent<UnityEngine.Camera>();
+            }
+
             if (_cameraService == null || _camera == null || !isActiveAndEnabled)
             {
                 return;
             }
 
-            _cameraService.Register(_cameraId, _camera);
-            _isRegistered = _cameraService.TryGetCamera(_cameraId, out var registeredCamera) && registeredCamera == _camera;
+            var id = GetEffectiveId();
+            _cameraService.Register(id, _camera);
+            _isRegistered = _cameraService.TryGetCamera(id, out var registeredCamera) && registeredCamera == _camera;
         }
     }
 }

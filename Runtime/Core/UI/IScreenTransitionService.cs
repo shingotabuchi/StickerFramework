@@ -5,12 +5,16 @@ using Cysharp.Threading.Tasks;
 namespace StickerFwk.Core.UI
 {
     /// <summary>
-    /// Covers the screen with a transition overlay, executes an action while covered,
+    /// Covers the screen with a transition rig, executes an action while covered,
     /// then reveals. Use the tag parameter for different wipe styles (e.g. "wipe", "fade").
     /// No tag uses the default ScreenTransitionView prefab.
     /// </summary>
     public interface IScreenTransitionService
     {
+        bool IsActive { get; }
+
+        event Action TransitionCompleted;
+
         UniTask ExecuteAsync(
             Func<CancellationToken, UniTask> action,
             string transitionViewTag = null,

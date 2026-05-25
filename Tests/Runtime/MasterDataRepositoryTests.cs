@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using StickerFwk.Core.AssetManagement;
@@ -26,6 +27,18 @@ namespace StickerFwk.Tests.Runtime
                 }
             }
             _assets.Clear();
+        }
+
+        [Test]
+        public async Task LoadAsync_UsesMasterDataAddressablesLabel()
+        {
+            var requester = new FakeAssetRequester(Array.Empty<string>());
+            var repository = new MasterDataRepository(requester);
+
+            await repository.LoadAsync().AsTask();
+
+            Assert.That(requester.LastPreloadLabel, Is.EqualTo("MasterData"));
+            Assert.That(repository.IsLoaded, Is.True);
         }
 
         [Test]
@@ -121,6 +134,7 @@ namespace StickerFwk.Tests.Runtime
             }
 
             public FakePreloadHandle PreloadHandle { get; }
+            public string LastPreloadLabel { get; private set; }
 
             public void Add(string key, ScriptableObject asset)
             {
@@ -130,8 +144,11 @@ namespace StickerFwk.Tests.Runtime
             public T GetAssetImmediate<T>(string key) where T : Object => (T)(Object)_assets[key];
 
             public UniTask<IPreloadHandle> PreloadFromLabel<T>(string assetLabel,
-                CancellationToken cancellationToken = default, IProgress<float> progress = null) where T : Object =>
-                UniTask.FromResult<IPreloadHandle>(PreloadHandle);
+                CancellationToken cancellationToken = default, IProgress<float> progress = null) where T : Object
+            {
+                LastPreloadLabel = assetLabel;
+                return UniTask.FromResult<IPreloadHandle>(PreloadHandle);
+            }
 
             public UniTask<IAssetHandle<T>> RequestAsset<T>(string key,
                 CancellationToken cancellationToken = default) where T : Object =>

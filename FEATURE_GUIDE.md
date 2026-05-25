@@ -257,7 +257,7 @@ namespace App.Features.Plinko
 **Prefab setup:**
 1. Create a UI prefab with `PlinkoWindow` component attached
 2. It auto-requires `CanvasGroup` (from `WindowView`)
-3. Configure in Inspector: Layer = `UI` (or `UIOverlay` / `Wipe`), ShowTransition = `Fade` (or any `ITransition` subclass), etc.
+3. Configure in Inspector: Layer = `UI` (or `UIOverlay`), ShowTransition = `Fade` (or any `ITransition` subclass), etc.
 4. Mark as Addressable with key `Views/PlinkoWindow.prefab`
 
 ### 5. LifetimeScope — DI Registration
@@ -335,6 +335,15 @@ namespace App.Features.Plinko
 > **For everything else, prefer `WindowView` + `IUIService.Push<T>()`.** That gets
 > you show/hide transitions, layer routing, blocking semantics, and auto-pop on
 > scope dispose — none of which a scene-bound view provides.
+>
+> **⚠️ Scene-readiness (easy to miss):** a start scene is usually entered at boot
+> (loaded directly), which does **not** require a ready signal. But the moment it can
+> also be reached via `ISceneTransitionService.TransitionToSceneAsync(...)` (e.g. a
+> "back to Title" button), it MUST call `SceneReadyNotifier.NotifyReady()` once ready —
+> from the scene's `LifetimeScope` build callback or a `SceneEntry`. The transition
+> awaits that signal before revealing; without it the transition hangs with the screen
+> concealed and the wipe never opens. Unlike feature scenes (§6), start scenes have no
+> async init, so the build callback is the natural place.
 
 The framework deliberately does **not** ship a parallel `SceneBoundView` hierarchy
 for this case. Scene-bound views are rare and their lifecycle is naturally

@@ -883,5 +883,16 @@ namespace StickerFwk.Infrastructure.UI
                 throw new ObjectDisposedException(nameof(UIService));
             }
         }
+
+        static void SetLayerRecursively(GameObject gameObject, int layer)
+        {
+            gameObject.layer = layer;
+
+            var transform = gameObject.transform;
+            for (var i = 0; i < transform.childCount; i++)
+            {
+                SetLayerRecursively(transform.GetChild(i).gameObject, layer);
+            }
+        }
     }
 }

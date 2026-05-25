@@ -35,7 +35,7 @@ namespace StickerFwk.Core.Editor.AssetTools
             }
         }
 
-        [MenuItem("Tools/Sticker Framework/Addressables/Danger Zone/Clear All and Apply Rules")]
+        [MenuItem("Tools/Sticker Framework/Addressables/Clear All and Apply Rules")]
         public static void ResetAndSetup()
         {
             var settings = Settings;

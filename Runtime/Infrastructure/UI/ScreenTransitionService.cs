@@ -1,26 +1,42 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using StickerFwk.Core;
+using StickerFwk.Core.AssetManagement;
 using StickerFwk.Core.UI;
+using UnityEngine;
 using VContainer;
+using VContainer.Unity;
+using Object = UnityEngine.Object;
 
 namespace StickerFwk.Infrastructure.UI
 {
     public class ScreenTransitionService : IScreenTransitionService
     {
-        private static readonly IProgress<float> NoProgress = new NullProgress();
+        readonly IAssetRequester _assetRequester;
+        readonly IObjectResolver _resolver;
+        readonly string _keyPrefix;
 
-        readonly IUIService _uiService;
-        readonly IWipeCameraService _wipeCameraService;
+        Transform _root;
+        int _activeCount;
+
+        public bool IsActive => _activeCount > 0;
+
+        public event Action TransitionCompleted;
 
         [Inject]
-        public ScreenTransitionService(
-            IUIService uiService,
-            IWipeCameraService wipeCameraService)
+        public ScreenTransitionService(IAssetRequester assetRequester, IObjectResolver resolver)
+            : this(assetRequester, resolver, resolver?.ResolveOrDefault<WindowAssetKeyOptions>())
         {
-            _uiService = uiService;
-            _wipeCameraService = wipeCameraService;
+        }
+
+        public ScreenTransitionService(
+            IAssetRequester assetRequester,
+            IObjectResolver resolver,
+            WindowAssetKeyOptions keyOptions)
+        {
+            _assetRequester = assetRequester ?? throw new ArgumentNullException(nameof(assetRequester));
+            _resolver = resolver;
+            _keyPrefix = keyOptions?.Prefix ?? string.Empty;
         }
 
         public async UniTask ExecuteAsync(
@@ -41,26 +57,35 @@ namespace StickerFwk.Infrastructure.UI
             string transitionViewTag = null,
             CancellationToken ct = default)
         {
-            // 1. Push overlay — awaits show transition so screen is fully covered
             if (action == null)
             {
                 throw new ArgumentNullException(nameof(action));
             }
 
-            var cameraLease = _wipeCameraService.Acquire();
-            var didPush = false;
+            var key = BuildKey(transitionViewTag);
+            using var assetHandle = await _assetRequester.RequestAsset<GameObject>(key, ct);
+            var prefab = assetHandle.Asset;
+            if (prefab == null)
+            {
+                throw new InvalidOperationException($"Addressable screen transition asset '{key}' resolved to null.");
+            }
+
+            var instance = Object.Instantiate(prefab, GetOrCreateRoot(), false);
+            var rig = instance.GetComponent<IScreenTransitionRig>() ?? instance.GetComponentInChildren<IScreenTransitionRig>(true);
+            if (rig == null)
+            {
+                Object.Destroy(instance);
+                throw new InvalidOperationException($"Prefab '{key}' must contain a component implementing {nameof(IScreenTransitionRig)}.");
+            }
+
+            _resolver?.InjectGameObject(instance);
+            _activeCount++;
 
             try
             {
-                var view = await _uiService.Push<ScreenTransitionView>(transitionViewTag, ct: ct);
-                didPush = true;
-
-                var progress = view is IScreenTransitionProgressSink sink
-                    ? new ScreenTransitionProgress(sink)
-                    : NoProgress;
+                await rig.Show(ct);
+                var progress = new ScreenTransitionProgress(rig);
                 progress.Report(0f);
-
-                // 2. Run the caller's action while screen is covered
                 await action(progress, ct);
                 progress.Report(1f);
             }
@@ -68,37 +93,62 @@ namespace StickerFwk.Infrastructure.UI
             {
                 try
                 {
-                    if (didPush)
-                    {
-                        // 3. Pop overlay — awaits hide transition to reveal. Use an uncancelled
-                        // caller token so a cancelled load does not leave the overlay stuck.
-                        await _uiService.Pop<ScreenTransitionView>(CancellationToken.None);
-                    }
+                    await rig.Hide(CancellationToken.None);
                 }
                 finally
                 {
-                    cameraLease.Dispose();
+                    _activeCount = Math.Max(0, _activeCount - 1);
+                    DestroyInstance(instance);
+                    TransitionCompleted?.Invoke();
                 }
             }
         }
 
-        private sealed class NullProgress : IProgress<float>
+        static void DestroyInstance(UnityEngine.Object instance)
         {
-            public void Report(float value) { }
+            if (instance == null)
+            {
+                return;
+            }
+
+            Object.DestroyImmediate(instance);
+        }
+
+        string BuildKey(string tag)
+        {
+            return string.IsNullOrEmpty(tag)
+                ? $"{_keyPrefix}Views/{nameof(ScreenTransitionView)}.prefab"
+                : $"{_keyPrefix}Views/{nameof(ScreenTransitionView)}_{tag}.prefab";
+        }
+
+        Transform GetOrCreateRoot()
+        {
+            if (_root != null)
+            {
+                return _root;
+            }
+
+            var go = new GameObject("[ScreenTransitions]");
+            if (Application.isPlaying)
+            {
+                Object.DontDestroyOnLoad(go);
+            }
+            _root = go.transform;
+            return _root;
         }
 
         private sealed class ScreenTransitionProgress : IProgress<float>
         {
-            private readonly IScreenTransitionProgressSink _sink;
+            private readonly IScreenTransitionRig _rig;
 
-            public ScreenTransitionProgress(IScreenTransitionProgressSink sink)
+            public ScreenTransitionProgress(IScreenTransitionRig rig)
             {
-                _sink = sink;
+                _rig = rig;
             }
 
             public void Report(float value)
             {
-                _sink.SetProgress(value);
+                _rig.SetProgress(value);
             }
         }
     }

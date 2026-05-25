@@ -1,23 +1,41 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
-using StickerFwk.Core;
+using StickerFwk.Core.AssetManagement;
 using StickerFwk.Core.UI;
 using StickerFwk.Infrastructure.UI;
 using UnityEngine;
+using Object = UnityEngine.Object;
 using Assert = NUnit.Framework.Assert;
 
 namespace StickerFwk.Tests.Runtime
 {
     public class ScreenTransitionServiceTests
     {
-        [Test]
-        public void ExecuteAsync_PopsOverlayWhenActionIsCanceled()
+        readonly List<GameObject> _spawned = new List<GameObject>();
+
+        [TearDown]
+        public void TearDown()
         {
-            var uiService = new FakeUIService();
-            var wipeCameraService = new FakeWipeCameraService();
-            var service = new ScreenTransitionService(uiService, wipeCameraService);
+            foreach (var go in _spawned)
+            {
+                if (go != null)
+                {
+                    Object.DestroyImmediate(go);
+                }
+            }
+            _spawned.Clear();
+        }
+
+        [Test]
+        public void ExecuteAsync_HidesAndDestroysRigWhenActionIsCanceled()
+        {
+            var prefab = MakePrefab();
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/ScreenTransitionView.prefab", prefab);
+            var service = new ScreenTransitionService(requester, resolver: null, keyOptions: null);
             using var cts = new CancellationTokenSource();
 
             Assert.CatchAsync<OperationCanceledException>(async () =>
@@ -27,93 +45,135 @@ namespace StickerFwk.Tests.Runtime
                     throw new OperationCanceledException(ct);
                 }, ct: cts.Token).AsTask());
 
-            Assert.That(uiService.PushCount, Is.EqualTo(1));
-            Assert.That(uiService.PopGenericCount, Is.EqualTo(1));
-            Assert.That(uiService.PopGenericTokenWasCanceled, Is.False);
-            Assert.That(wipeCameraService.AcquireCount, Is.EqualTo(1));
-            Assert.That(wipeCameraService.DisposeCount, Is.EqualTo(1));
+            var rig = prefab.GetComponent<TestTransitionRig>();
+            Assert.That(rig.ShowCount, Is.EqualTo(1));
+            Assert.That(rig.HideCount, Is.EqualTo(1));
+            Assert.That(rig.DestroyedInstanceCount, Is.EqualTo(1));
+            Assert.That(service.IsActive, Is.False);
         }
 
-        sealed class FakeWipeCameraService : IWipeCameraService
+        [Test]
+        public async System.Threading.Tasks.Task ExecuteAsync_ReportsProgressAndCompletionInOrder()
         {
-            public int AcquireCount { get; private set; }
-            public int DisposeCount { get; private set; }
+            var prefab = MakePrefab();
+            var requester = new FakeAssetRequester();
+            requester.Add("Views/ScreenTransitionView_fade.prefab", prefab);
+            var service = new ScreenTransitionService(requester, resolver: null, keyOptions: null);
+            var completedCount = 0;
+            service.TransitionCompleted += () => completedCount++;
 
-            public Camera EnsureCamera() => null;
-
-            public IWipeCameraLease Acquire()
+            await service.ExecuteAsync((progress, ct) =>
             {
-                AcquireCount++;
-                return new Lease(this);
-            }
+                Assert.That(service.IsActive, Is.True);
+                progress.Report(0.5f);
+                return UniTask.CompletedTask;
+            }, "fade").AsTask();
 
-            sealed class Lease : IWipeCameraLease
+            var rig = prefab.GetComponent<TestTransitionRig>();
+            Assert.That(rig.Events, Is.EqualTo(new[] { "Show", "Progress:0", "Progress:0.5", "Progress:1", "Hide", "Destroy" }));
+            Assert.That(completedCount, Is.EqualTo(1));
+        }
+
+        GameObject MakePrefab()
+        {
+            var go = new GameObject("ScreenTransitionView", typeof(TestTransitionRig));
+            _spawned.Add(go);
+            return go;
+        }
+
+        sealed class TestTransitionRig : MonoBehaviour, IScreenTransitionRig
+        {
+            static TestTransitionRig s_lastPrefabRig;
+
+            public int ShowCount { get; private set; }
+            public int HideCount { get; private set; }
+            public int DestroyedInstanceCount { get; private set; }
+            public List<string> Events { get; } = new List<string>();
+
+            TestTransitionRig _prefabRig;
+
+            void Awake()
             {
-                readonly FakeWipeCameraService _owner;
-                bool _disposed;
-
-                public Lease(FakeWipeCameraService owner)
+                if (name.EndsWith("(Clone)", StringComparison.Ordinal))
                 {
-                    _owner = owner;
+                    _prefabRig = s_lastPrefabRig;
+                    return;
                 }
 
-                public Camera Camera => null;
+                s_lastPrefabRig = this;
+                _prefabRig = this;
+            }
 
-                public void Dispose()
+            public UniTask Show(CancellationToken ct)
+            {
+                _prefabRig.ShowCount++;
+                _prefabRig.Events.Add("Show");
+                return UniTask.CompletedTask;
+            }
+
+            public UniTask Hide(CancellationToken ct)
+            {
+                _prefabRig.HideCount++;
+                _prefabRig.Events.Add("Hide");
+                return UniTask.CompletedTask;
+            }
+
+            public void SetProgress(float value)
+            {
+                _prefabRig.Events.Add($"Progress:{value:0.#}");
+            }
+
+            void OnDestroy()
+            {
+                if (_prefabRig != null && _prefabRig != this)
                 {
-                    if (_disposed)
-                    {
-                        return;
-                    }
-
-                    _disposed = true;
-                    _owner.DisposeCount++;
+                    _prefabRig.DestroyedInstanceCount++;
+                    _prefabRig.Events.Add("Destroy");
                 }
             }
         }
 
-        sealed class FakeUIService : IUIService
+        sealed class FakeAssetRequester : IAssetRequester
         {
-            public int PushCount { get; private set; }
-            public int PopGenericCount { get; private set; }
-            public bool PopGenericTokenWasCanceled { get; private set; }
+            readonly Dictionary<string, GameObject> _prefabs = new Dictionary<string, GameObject>();
 
-            public UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView
+            public void Add(string key, GameObject prefab) => _prefabs[key] = prefab;
+
+            public UniTask<IAssetHandle<T>> RequestAsset<T>(string key, CancellationToken cancellationToken = default)
+                where T : Object
             {
-                PushCount++;
-                return UniTask.FromResult<T>(null);
+                if (!_prefabs.TryGetValue(key, out var prefab))
+                {
+                    throw new InvalidOperationException($"No fake prefab registered for '{key}'");
+                }
+
+                return UniTask.FromResult<IAssetHandle<T>>((IAssetHandle<T>)(object)new FakeAssetHandle(prefab));
             }
 
-            public UniTask<bool> Pop<T>(CancellationToken ct = default) where T : WindowView
-            {
-                PopGenericCount++;
-                PopGenericTokenWasCanceled = ct.IsCancellationRequested;
-                return UniTask.FromResult(true);
-            }
+            public T GetAssetImmediate<T>(string key) where T : Object =>
+                _prefabs.TryGetValue(key, out var go) ? (T)(Object)go : null;
 
-            public UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView, IWindowWithArgs<TArgs> => throw new NotSupportedException();
-            public UniTask<bool> Pop(UILayer layer = UILayer.UI, CancellationToken ct = default) => throw new NotSupportedException();
-            public UniTask<bool> Pop(WindowView view, CancellationToken ct = default) => throw new NotSupportedException();
-            public UniTask<bool> Pop(WindowView view, bool immediate, CancellationToken ct = default) => throw new NotSupportedException();
-            public UniTask<T> Replace<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView => throw new NotSupportedException();
-            public UniTask<T> Replace<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView, IWindowWithArgs<TArgs> => throw new NotSupportedException();
-            public UniTask<int> PopAll(UILayer layer, bool immediate = false, CancellationToken ct = default) => throw new NotSupportedException();
-            public UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView => throw new NotSupportedException();
-            public UniTask<WindowPushHandle<T>> PushWithHandle<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView, IWindowWithArgs<TArgs> => throw new NotSupportedException();
-            public UniTask<WindowPushHandle<T>> PushBelow<T>(WindowView coveringView, string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView => throw new NotSupportedException();
-            public UniTask<T> PushPrepared<T>(Func<T, CancellationToken, UniTask> prepareAsync, string tag = null, WindowOptions options = null, CancellationToken ct = default)
-                where T : WindowView => throw new NotSupportedException();
-            public bool IsOpen<T>() where T : WindowView => false;
-            public T GetWindow<T>() where T : WindowView => null;
-            public int GetStackCount(UILayer layer) => 0;
-            public UniTask Preload<T>(string tag = null, CancellationToken ct = default) where T : WindowView => UniTask.CompletedTask;
-            public void Unload<T>(string tag = null) where T : WindowView { }
+            public UniTask<IAssetHandle> Preload<T>(IEnumerable<string> keys,
+                CancellationToken cancellationToken = default, IProgress<float> progress = null)
+                where T : Object => UniTask.FromResult<IAssetHandle>(null);
+
+            public UniTask<IPreloadHandle> PreloadFromLabel<T>(string assetLabel,
+                CancellationToken cancellationToken = default, IProgress<float> progress = null)
+                where T : Object => UniTask.FromResult<IPreloadHandle>(null);
+
+            public void Release(string key) { }
+            public void Release(IEnumerable<string> keys) { }
+            public UniTask ReleaseFromLabel(string assetLabel, CancellationToken cancellationToken = default) =>
+                UniTask.CompletedTask;
+            public bool IsLoaded(string key) => _prefabs.ContainsKey(key);
+            public bool IsLoaded(IEnumerable<string> keys) => true;
+        }
+
+        sealed class FakeAssetHandle : IAssetHandle<GameObject>
+        {
+            public FakeAssetHandle(GameObject asset) => Asset = asset;
+            public GameObject Asset { get; }
+            public void Dispose() { }
         }
     }
 }

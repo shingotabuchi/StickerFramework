@@ -297,7 +297,7 @@ namespace StickerFwk.Tests.Runtime
         [Test]
         public async Task PushRestoresPrefabAlphaBeforeShowTransition()
         {
-            var prefab = MakePrefab<TestWindowViewA>(UILayer.Wipe);
+            var prefab = MakePrefab<TestWindowViewA>(UILayer.UI);
             prefab.GetComponent<CanvasGroup>().alpha = 1f;
             var requester = new FakeAssetRequester();
             requester.Add("Views/TestWindowViewA.prefab", prefab);

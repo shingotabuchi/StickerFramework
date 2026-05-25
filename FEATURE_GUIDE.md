@@ -257,7 +257,7 @@ namespace App.Features.Plinko
 **Prefab setup:**
 1. Create a UI prefab with `PlinkoWindow` component attached
 2. It auto-requires `CanvasGroup` (from `WindowView`)
-3. Configure in Inspector: Layer = `UI` (or `UIOverlay` / `Wipe`), ShowTransition = `Fade` (or any `ITransition` subclass), etc.
+3. Configure in Inspector: Layer = `UI` (or `UIOverlay`), ShowTransition = `Fade` (or any `ITransition` subclass), etc.
 4. Mark as Addressable with key `Views/PlinkoWindow.prefab`
 
 ### 5. LifetimeScope — DI Registration

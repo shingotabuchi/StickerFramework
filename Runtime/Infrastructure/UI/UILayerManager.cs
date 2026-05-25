@@ -11,7 +11,6 @@ namespace StickerFwk.Infrastructure.UI
     public class UILayerManager : IDisposable
     {
         const string UiLayerName = "UI";
-        const string WipeLayerName = "Wipe";
 
         readonly ICameraService _cameraService;
         readonly ISubscriber<CameraRegisteredEvent> _cameraRegisteredSubscriber;
@@ -37,7 +36,6 @@ namespace StickerFwk.Infrastructure.UI
             {
                 case UILayer.UI: return CameraId.UI;
                 case UILayer.UIOverlay: return CameraId.UIOverlay;
-                case UILayer.Wipe: return CameraId.Wipe;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(layer), layer, "No camera mapping for layer");
             }
@@ -47,7 +45,6 @@ namespace StickerFwk.Infrastructure.UI
         {
             if (cameraId == CameraId.UI) { layer = UILayer.UI; return true; }
             if (cameraId == CameraId.UIOverlay) { layer = UILayer.UIOverlay; return true; }
-            if (cameraId == CameraId.Wipe) { layer = UILayer.Wipe; return true; }
             layer = default;
             return false;
         }
@@ -177,8 +174,6 @@ namespace StickerFwk.Infrastructure.UI
         {
             switch (layer)
             {
-                case UILayer.Wipe:
-                    return LayerMask.NameToLayer(WipeLayerName);
                 case UILayer.UI:
                 case UILayer.UIOverlay:
                     return LayerMask.NameToLayer(UiLayerName);

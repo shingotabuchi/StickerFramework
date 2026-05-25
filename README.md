@@ -17,6 +17,7 @@ Subsystem docs live next to their code. Each is the authoritative reference for 
 | [`Runtime/Core/Camera/README.md`](Runtime/Core/Camera/README.md) | Camera registration, profiles, stack resolver |
 | [`Runtime/Core/Debug/README.md`](Runtime/Core/Debug/README.md) | `STICKER_DEBUG`-gated in-game debug menu |
 | [`Runtime/Infrastructure/UI/README.md`](Runtime/Infrastructure/UI/README.md) | Window stack, layers, transitions, `CanvasCameraBinder` |
+| [`Runtime/Infrastructure/Haptics/README.md`](Runtime/Infrastructure/Haptics/README.md) | Mobile haptics (iOS Core Haptics, Android `VibrationEffect`), default presets, cue-sheet authoring |
 
 For per-class behaviour, read the XML doc comments on the type — they are the source of truth and surface in IDE tooltips. Markdown docs cover **systems** (multiple types collaborating); they do not replicate per-class API reference.
 
@@ -36,6 +37,7 @@ Packages/com.stickerfwk.core/
 │   │   ├── AssetManagement/
 │   │   ├── Camera/
 │   │   ├── Diagnostics/
+│   │   ├── Haptics/
 │   │   ├── Initialization/
 │   │   ├── Input/
 │   │   ├── InspectorTools/
@@ -71,6 +73,7 @@ Packages/com.stickerfwk.core/
 | `AssetManagement/` | `IAssetRequester` | Async asset loading contract |
 | `Camera/` | `ICameraService`, `CameraId`, `CameraFitter`, `CameraExtensions` | Camera registration and query contracts |
 | `Diagnostics/` | `Assert`, `Log` | Debug assertion and logging wrappers |
+| `Haptics/` | `IHapticService`, `HapticPattern`, `HapticPatternCurve`, `HapticCurvePoint`, `HapticPresetId`, `HapticPresets` | Platform-agnostic haptics abstraction (consumer-facing) |
 | `Initialization/` | `IRootInitService`, `IInitTask`, `IInitObserver`, `InitPhase` | App startup contracts: handshake, pipeline step, lifecycle hook, phase enum |
 | `Input/` | `IInputService`, `IRawInputService`, `IInputLockService`, `InputLockService`, `InputLockChangedEvent` | Input abstraction with ref-counted locking |
 | `InspectorTools/` | `ButtonAttribute` | Custom inspector attributes |
@@ -81,7 +84,7 @@ Packages/com.stickerfwk.core/
 | `Rendering/` | `IBlurService`, `BlurTransitionEvent` | Blur effect contract and event |
 | `Screen/` | `ScreenService`, `ScreenChangedEvent` | Screen resolution monitoring |
 | `Time/` | `ITimeService` | Time abstraction contract |
-| `UI/` | `IUIService`, `IScreenTransitionService`, `IScreenTransitionProgressSink`, `ITransition` (+ built-in `FadeTransition`, `SlideTransition`, `ScaleTransition`, `NoneTransition`, `AnimatorTransition`, `TimelineTransition`, `AnimatorTransitionTargets`, `TimelineTransitionTargets`, `PlayableDirectorExtensions`), `WindowView`, `WindowOptions`, `CoolButton`, `SafeAreaView`, `ScreenTransitionView`, `UILayer`, `WindowOpenedEvent`, `WindowClosedEvent` | Stack-based UI window system |
+| `UI/` | `IUIService`, `IScreenTransitionService`, `IScreenTransitionRig`, `IScreenTransitionProgressSink`, `ITransition` (+ built-in `FadeTransition`, `SlideTransition`, `ScaleTransition`, `NoneTransition`, `AnimatorTransition`, `TimelineTransition`, `AnimatorTransitionTargets`, `TimelineTransitionTargets`, `PlayableDirectorExtensions`), `WindowView`, `WindowOptions`, `CoolButton`, `SafeAreaView`, `ScreenTransitionView`, `UILayer`, `WindowOpenedEvent`, `WindowClosedEvent` | Stack-based UI window system |
 | `Utilities/` | `Deque<T>`, `KeyedOperationGate<TKey>`, `SmoothMath` | General-purpose data structures and math |
 
 ### Infrastructure — `Runtime/Infrastructure/`
@@ -90,6 +93,7 @@ Packages/com.stickerfwk.core/
 |---|---|---|
 | `AssetManagement/` | `AddressableCache`, `AddressableHandle<T>`, `AddressableManager`, `IAddressableHandle` | Addressables-backed asset loading |
 | `Camera/` | `CameraService`, `CameraModel`, `ManagedCamera`, `CameraRegisteredEvent` | Camera registry implementation |
+| `Haptics/` | `HapticService`, `HapticServiceRoot`, `HapticServiceInstaller`, `HapticCueSheet`, `HapticData`, `IHapticBackend` (+ NoOp/iOS/Android impls) | Mobile haptics: one-shot playback, default preset catalogue, Addressable cue sheets |
 | `Initialization/` | `RootInitService`, `InitContainerBuilderExtensions`, `TargetFrameRateInitTask` | Pipeline orchestrator + `AddInitTask`/`AddInitObserver`/`UseTargetFrameRate` extensions |
 | `Input/` | `InputService`, `LockingInputService`, `WorldRaycastService` | Input System wrappers |
 | `MasterData/` | `MasterDataRepository`, `MasterDataInitTask` | Addressables-backed master data loading + `UseMasterDataInit()` task |

@@ -23,7 +23,12 @@ namespace StickerFwk.Infrastructure.UI
 
         private GameObject _root;
         private CanvasGroup _canvasGroup;
+        private bool _isActive;
         private bool _disposed;
+
+        public bool IsActive => _isActive;
+
+        public event Action TransitionCompleted;
 
         public UniTask ExecuteAsync(
             Func<CancellationToken, UniTask> action,
@@ -53,6 +58,7 @@ namespace StickerFwk.Infrastructure.UI
             try
             {
                 EnsureView();
+                _isActive = true;
                 _root.SetActive(true);
                 await FadeAsync(0f, 1f, ct);
 
@@ -68,6 +74,8 @@ namespace StickerFwk.Infrastructure.UI
                     _root.SetActive(false);
                 }
 
+                _isActive = false;
+                TransitionCompleted?.Invoke();
                 _transitionLock.Release();
             }
         }

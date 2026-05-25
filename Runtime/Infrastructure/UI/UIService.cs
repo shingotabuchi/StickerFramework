@@ -548,10 +548,6 @@ namespace StickerFwk.Infrastructure.UI
                 }
 
                 instance = Object.Instantiate(windowAsset.Prefab, layerTransform);
-                if (layer == UILayer.Wipe)
-                {
-                    SetLayerRecursively(instance, layerTransform.gameObject.layer);
-                }
 
                 // Hide the freshly-instantiated window until the show transition begins.
                 // OnInitialize may await async work (e.g. Addressables loads); without this,

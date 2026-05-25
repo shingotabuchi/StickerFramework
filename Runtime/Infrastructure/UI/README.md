@@ -47,16 +47,15 @@ Predefined layers with fixed sort orders (`UILayer` enum, defined in `Runtime/Co
 |-------|-----------|---------------------------|---------|
 | **UI** | 100 | `CameraId.UI` | Standard in-game UI (HUD, menus, popups, modals) |
 | **UIOverlay** | 200 | `CameraId.UIOverlay` | UI that must render above the main UI camera |
-| **Wipe** | 300 | `CameraId.Wipe` | Full-screen scene-transition wipes |
 
-`UI`, `UIOverlay`, and `Wipe` are the only camera IDs reserved by the framework. Projects may define any additional IDs in project code, for example `CameraIds.Game` or `CameraIds.BirdsEye`.
+`UI` and `UIOverlay` are the only camera IDs reserved by the framework. Projects may define any additional IDs in project code, for example `CameraIds.Game` or `CameraIds.BirdsEye`. Screen transitions are self-contained prefabs and do not consume a `UILayer`.
 
 - Windows specify which layer they belong to via the `Layer` field on `WindowView` (default `UILayer.UI`).
-- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay` / `Wipe`) has not been registered yet — place a scene-resident camera with `ManagedCamera` for scene-owned IDs, and register `WipeCameraService` for `CameraId.Wipe`.
+- Layer canvases are created **lazily** the first time a window targets that layer (`UILayerManager.TryEnsureLayer`) and parented under a single `[UI Root]` GameObject (DontDestroyOnLoad). The push fails fast if the layer's camera (`CameraId.UI` / `UIOverlay`) has not been registered yet — place a scene-resident camera with `ManagedCamera` for each reserved ID.
 - Each Canvas is configured with `RenderMode.ScreenSpaceCamera` bound to the registered camera, `sortingOrder` equal to the layer's integer value, a `CanvasScaler` (1920×1080 reference, 0.5 match by default — override via `UICanvasOptions`), and a `GraphicRaycaster`. Canvases are disabled when their stack becomes empty and re-enabled when the next window pushes onto the layer.
 - `UILayerManager` re-binds `Canvas.worldCamera` automatically when a layer's camera is unregistered and a fresh one is registered (e.g. across scene transitions that replace scene-resident UI cameras).
 
-> **Why only three layers?** The framework intentionally does **not** split HUD / Window / Popup / Modal across separate `UILayer` values. Within `UI`, ordering between simultaneously open windows is determined by push order (later pushes draw above earlier ones) and child-sibling order inside a prefab; modality is controlled per-window via `WindowView.IsBlocking`. Add a new enum entry only when you need a dedicated camera/canvas pair (different post-processing, guaranteed top/bottom rendering, etc.) — not just because two windows have different gameplay roles.
+> **Why only two layers?** The framework intentionally does **not** split HUD / Window / Popup / Modal across separate `UILayer` values. Within `UI`, ordering between simultaneously open windows is determined by push order (later pushes draw above earlier ones) and child-sibling order inside a prefab; modality is controlled per-window via `WindowView.IsBlocking`. Add a new enum entry only when you need a dedicated camera/canvas pair (different post-processing, guaranteed top/bottom rendering, etc.) — not just because two windows have different gameplay roles.
 
 Need a Canvas authored in the scene (boot splash, version label, debug overlay)? Use `CanvasCameraBinder` instead — see **R11**. The `UILayer` enum is reserved for windows pushed through `IUIService`.
 
@@ -73,7 +72,7 @@ builder.RegisterInstance(new UICanvasOptions
     // Per-layer tweaks if needed:
     ConfigureScaler = (layer, scaler) =>
     {
-        if (layer == UILayer.Wipe) scaler.matchWidthOrHeight = 0f;
+        if (layer == UILayer.UIOverlay) scaler.matchWidthOrHeight = 0f;
     }
 });
 ```
@@ -102,9 +101,7 @@ If no instance is registered, `UILayerManager` falls back to the framework defau
 - Transitions are async (`UniTask`-based) and support cancellation.
 - During a transition, input to the transitioning window is disabled.
 - Runtime overrides for transition and duration are supported via `WindowOptions`.
-- `IScreenTransitionService.ExecuteAsync` has a progress-aware overload. A `ScreenTransitionView`
-  can implement `IScreenTransitionProgressSink` to receive normalized `0..1` progress while
-  the covered operation runs; transition views that do not implement it keep the same behavior.
+- `IScreenTransitionService.ExecuteAsync` loads a self-contained transition prefab rig directly (not through `IUIService.Push`). The rig implements `IScreenTransitionRig`; its root can forward progress to `IScreenTransitionProgressSink` semantics for loading bars.
 
 ## R6: Addressable Loading
 
@@ -176,14 +173,14 @@ Runtime overrides can be passed via a `WindowOptions` object when calling `UISer
 
 | Concern | Where |
 |---|---|
-| Register a scene camera for the target `CameraId` | `ManagedCamera` on the camera GameObject (`CameraId.Wipe` is provided by `WipeCameraService`) |
+| Register a scene camera for the target `CameraId` | `ManagedCamera` on the camera GameObject |
 | Auto-install `IInstaller` MonoBehaviours on a scope | Scope inherits from `StickerLifetimeScope` |
 | Auto-inject scene-authored binders | `builder.RegisterComponentInHierarchy<CanvasCameraBinder>()` in `ConfigureScope` |
 | Provide `ICameraService` + `ISubscriber<CameraRegisteredEvent>` | Registered in `RootLifetimeScope` (parent scope) |
 
 ### Layering
 
-The binder does **not** set `Canvas.sortingOrder`. Stack order between camera-rendered canvases is determined by the authored camera setup: URP Base/Overlay render type, the active Base chosen by `ICameraService`, overlay camera depth, and each Canvas' own sorting order. A binder targeting `CameraId.UI` can therefore render below `CameraId.Wipe` when those scene cameras are authored and stacked that way.
+The binder does **not** set `Canvas.sortingOrder`. Stack order between camera-rendered canvases is determined by the authored camera setup: URP Base/Overlay render type, the active Base chosen by `ICameraService`, overlay camera depth, and each Canvas' own sorting order. Self-contained transition rigs participate via their own overlay camera depth while instantiated.
 
 ### What it deliberately does not do
 

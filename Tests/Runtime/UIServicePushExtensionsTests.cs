@@ -183,12 +183,12 @@ namespace StickerFwk.Tests.Runtime
         }
 
         [Test]
-        public async Task Push_WipeLayer_UsesWipeUnityLayerForCanvasBlockerAndWindowHierarchy()
+        public async Task Push_UILayer_KeepsAuthoredWindowHierarchyLayer()
         {
-            var wipeLayer = LayerMask.NameToLayer("Wipe");
-            Assert.That(wipeLayer, Is.GreaterThanOrEqualTo(0));
+            var uiLayer = LayerMask.NameToLayer("UI");
+            Assert.That(uiLayer, Is.GreaterThanOrEqualTo(0));
 
-            var prefab = MakePrefab<PlainHandleView>(UILayer.Wipe);
+            var prefab = MakePrefab<PlainHandleView>(UILayer.UI);
             var child = new GameObject("Child", typeof(RectTransform));
             child.transform.SetParent(prefab.transform, false);
 
@@ -203,10 +203,10 @@ namespace StickerFwk.Tests.Runtime
             var blocker = layerRoot.Find("InputBlocker");
 
             Assert.That(blocker, Is.Not.Null);
-            Assert.That(layerRoot.gameObject.layer, Is.EqualTo(wipeLayer));
-            Assert.That(blocker.gameObject.layer, Is.EqualTo(wipeLayer));
-            Assert.That(view.gameObject.layer, Is.EqualTo(wipeLayer));
-            Assert.That(view.transform.GetChild(0).gameObject.layer, Is.EqualTo(wipeLayer));
+            Assert.That(layerRoot.gameObject.layer, Is.EqualTo(uiLayer));
+            Assert.That(blocker.gameObject.layer, Is.EqualTo(uiLayer));
+            Assert.That(view.gameObject.layer, Is.EqualTo(prefab.layer));
+            Assert.That(view.transform.GetChild(0).gameObject.layer, Is.EqualTo(child.layer));
         }
 
         [Test]

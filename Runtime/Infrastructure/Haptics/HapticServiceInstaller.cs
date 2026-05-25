@@ -1,4 +1,5 @@
 using Cysharp.Threading.Tasks;
+using StickerFwk.Core.AssetManagement;
 using StickerFwk.Core.Haptics;
 using UnityEngine;
 using VContainer;
@@ -19,7 +20,10 @@ namespace StickerFwk.Infrastructure.Haptics
         {
             RegisterRoot(builder);
 
-            builder.Register<HapticService>(Lifetime.Singleton)
+            builder.Register(container => new HapticService(
+                    container.Resolve<IAssetRequester>(),
+                    container.Resolve<HapticServiceRoot>()),
+                    Lifetime.Singleton)
                 .AsImplementedInterfaces()
                 .AsSelf();
 

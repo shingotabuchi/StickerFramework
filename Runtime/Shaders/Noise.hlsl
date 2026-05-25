@@ -45,6 +45,12 @@ float3 StickerHash33(float3 p)
     return frac((p.xxy + p.yxx) * p.zyx);
 }
 
+// 1D version of the quintic interpolation curve.
+float StickerNoiseFade(float t)
+{
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
 // Quintic interpolation curve used by value and Perlin noise.
 // This is smoother than smoothstep at cell boundaries.
 float2 StickerNoiseFade(float2 t)
@@ -56,6 +62,21 @@ float2 StickerNoiseFade(float2 t)
 float3 StickerNoiseFade(float3 t)
 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+// 1D value noise.
+// Hashes random scalar values at integer cell endpoints, then smoothly
+// interpolates between them along the line.
+float StickerValueNoise(float p)
+{
+    float i = floor(p);
+    float f = frac(p);
+    float u = StickerNoiseFade(f);
+
+    float a = StickerHash11(i);
+    float b = StickerHash11(i + 1.0);
+
+    return lerp(a, b, u);
 }
 
 // 2D value noise.
@@ -102,6 +123,12 @@ float StickerValueNoise(float3 p)
     return lerp(nxy0, nxy1, u.z);
 }
 
+// Signed 1D value noise remapped from [0, 1] to [-1, 1].
+float StickerValueNoiseSigned(float p)
+{
+    return StickerValueNoise(p) * 2.0 - 1.0;
+}
+
 // Signed 2D value noise remapped from [0, 1] to [-1, 1].
 float StickerValueNoiseSigned(float2 p)
 {
@@ -112,6 +139,25 @@ float StickerValueNoiseSigned(float2 p)
 float StickerValueNoiseSigned(float3 p)
 {
     return StickerValueNoise(p) * 2.0 - 1.0;
+}
+
+// 1D Perlin-style gradient noise.
+// Each integer endpoint gets a hashed unit gradient (in 1D that is just a
+// sign), each endpoint contributes gradient * offset, and the two are blended
+// with the quintic fade curve.
+float StickerGradientNoise(float p)
+{
+    float i = floor(p);
+    float f = frac(p);
+    float u = StickerNoiseFade(f);
+
+    float g0 = sign(StickerHash11(i) * 2.0 - 1.0);
+    float g1 = sign(StickerHash11(i + 1.0) * 2.0 - 1.0);
+
+    float n0 = g0 * (f - 0.0);
+    float n1 = g1 * (f - 1.0);
+
+    return lerp(n0, n1, u) * 0.5 + 0.5;
 }
 
 // 2D Perlin-style gradient noise.
@@ -137,10 +183,23 @@ float StickerGradientNoise(float2 p)
     return lerp(lerp(n00, n10, u.x), lerp(n01, n11, u.x), u.y) * 0.5 + 0.5;
 }
 
+// Signed 1D Perlin-style gradient noise remapped from [0, 1] to [-1, 1].
+float StickerGradientNoiseSigned(float p)
+{
+    return StickerGradientNoise(p) * 2.0 - 1.0;
+}
+
 // Signed 2D Perlin-style gradient noise remapped from [0, 1] to [-1, 1].
 float StickerGradientNoiseSigned(float2 p)
 {
     return StickerGradientNoise(p) * 2.0 - 1.0;
+}
+
+// Alias for the Perlin-style 1D gradient noise.
+// Use this when you specifically want "Perlin noise" at the call site.
+float StickerPerlinNoise(float p)
+{
+    return StickerGradientNoise(p);
 }
 
 // Alias for the Perlin-style 2D gradient noise.
@@ -150,10 +209,38 @@ float StickerPerlinNoise(float2 p)
     return StickerGradientNoise(p);
 }
 
+// Signed alias for the Perlin-style 1D gradient noise.
+float StickerPerlinNoiseSigned(float p)
+{
+    return StickerGradientNoiseSigned(p);
+}
+
 // Signed alias for the Perlin-style 2D gradient noise.
 float StickerPerlinNoiseSigned(float2 p)
 {
     return StickerGradientNoiseSigned(p);
+}
+
+// 1D fractal Brownian motion using value noise.
+// octaves: number of noise layers.
+// lacunarity: frequency multiplier per octave, commonly 2.
+// gain: amplitude multiplier per octave, commonly 0.5.
+float StickerFbmValue(float p, int octaves, float lacunarity, float gain)
+{
+    float sum = 0.0;
+    float amplitude = 0.5;
+    float normalization = 0.0;
+
+    [loop]
+    for (int i = 0; i < octaves; i++)
+    {
+        sum += StickerValueNoise(p) * amplitude;
+        normalization += amplitude;
+        p *= lacunarity;
+        amplitude *= gain;
+    }
+
+    return sum / max(normalization, 0.0001);
 }
 
 // Fractal Brownian motion using value noise.
@@ -170,6 +257,26 @@ float StickerFbmValue(float2 p, int octaves, float lacunarity, float gain)
     for (int i = 0; i < octaves; i++)
     {
         sum += StickerValueNoise(p) * amplitude;
+        normalization += amplitude;
+        p *= lacunarity;
+        amplitude *= gain;
+    }
+
+    return sum / max(normalization, 0.0001);
+}
+
+// 1D fractal Brownian motion using Perlin-style gradient noise.
+// Produces smoother, more organic layering than value-noise fBM.
+float StickerFbmGradient(float p, int octaves, float lacunarity, float gain)
+{
+    float sum = 0.0;
+    float amplitude = 0.5;
+    float normalization = 0.0;
+
+    [loop]
+    for (int i = 0; i < octaves; i++)
+    {
+        sum += StickerGradientNoise(p) * amplitude;
         normalization += amplitude;
         p *= lacunarity;
         amplitude *= gain;
@@ -198,10 +305,22 @@ float StickerFbmGradient(float2 p, int octaves, float lacunarity, float gain)
     return sum / max(normalization, 0.0001);
 }
 
+// Convenience 1D value-noise fBM preset: 5 octaves, lacunarity 2, gain 0.5.
+float StickerFbmValue(float p)
+{
+    return StickerFbmValue(p, 5, 2.0, 0.5);
+}
+
 // Convenience value-noise fBM preset: 5 octaves, lacunarity 2, gain 0.5.
 float StickerFbmValue(float2 p)
 {
     return StickerFbmValue(p, 5, 2.0, 0.5);
+}
+
+// Convenience 1D Perlin-style fBM preset: 5 octaves, lacunarity 2, gain 0.5.
+float StickerFbmGradient(float p)
+{
+    return StickerFbmGradient(p, 5, 2.0, 0.5);
 }
 
 // Convenience Perlin-style fBM preset: 5 octaves, lacunarity 2, gain 0.5.
@@ -210,16 +329,101 @@ float StickerFbmGradient(float2 p)
     return StickerFbmGradient(p, 5, 2.0, 0.5);
 }
 
+// Alias for Perlin-style 1D fBM with explicit naming at call sites.
+float StickerFbmPerlin(float p, int octaves, float lacunarity, float gain)
+{
+    return StickerFbmGradient(p, octaves, lacunarity, gain);
+}
+
 // Alias for Perlin-style fBM with explicit naming at call sites.
 float StickerFbmPerlin(float2 p, int octaves, float lacunarity, float gain)
 {
     return StickerFbmGradient(p, octaves, lacunarity, gain);
 }
 
+// Convenience 1D Perlin-style fBM preset: 5 octaves, lacunarity 2, gain 0.5.
+float StickerFbmPerlin(float p)
+{
+    return StickerFbmGradient(p);
+}
+
 // Convenience Perlin-style fBM preset: 5 octaves, lacunarity 2, gain 0.5.
 float StickerFbmPerlin(float2 p)
 {
     return StickerFbmGradient(p);
+}
+
+// Periodic (seamlessly looping) noise.
+// Implemented by sampling 2D noise along a circle: as t advances by one
+// `period`, the sample point travels a full loop and returns exactly to its
+// start, so the output tiles with no seam in value or slope.
+// For a radial speed-line mask, pass the screen-space angle as t and
+// 6.28318530718 (2*PI) as period; `detail` is the circle radius and controls
+// how many streaks appear around the circle.
+
+// Periodic Perlin-style noise, approximately [0, 1].
+float StickerPeriodicNoise(float t, float period, float detail)
+{
+    float a = 6.28318530718 * (t / period);
+    float2 p = float2(cos(a), sin(a)) * detail;
+    return StickerGradientNoise(p);
+}
+
+// Signed periodic Perlin-style noise remapped from [0, 1] to [-1, 1].
+float StickerPeriodicNoiseSigned(float t, float period, float detail)
+{
+    return StickerPeriodicNoise(t, period, detail) * 2.0 - 1.0;
+}
+
+// Periodic value noise, approximately [0, 1].
+// Cheaper than the Perlin-style variant; slightly blockier.
+float StickerPeriodicValueNoise(float t, float period, float detail)
+{
+    float a = 6.28318530718 * (t / period);
+    float2 p = float2(cos(a), sin(a)) * detail;
+    return StickerValueNoise(p);
+}
+
+// Signed periodic value noise remapped from [0, 1] to [-1, 1].
+float StickerPeriodicValueNoiseSigned(float t, float period, float detail)
+{
+    return StickerPeriodicValueNoise(t, period, detail) * 2.0 - 1.0;
+}
+
+// Panned periodic noise.
+// Same circular sampling as above, but the sampling circle is offset along a
+// second axis of the 2D noise field by `pan`. For any fixed `pan` the result
+// is still perfectly periodic in `t` with `period` (the circle is closed);
+// sliding `pan` smoothly scrolls the loop's content through the field, so it
+// works as an animation / scroll axis (e.g. pass _Time.y to drift the streaks
+// instead of just rotating them).
+
+// Panned periodic Perlin-style noise, approximately [0, 1].
+float StickerPeriodicNoise(float t, float pan, float period, float detail)
+{
+    float a = 6.28318530718 * (t / period);
+    float2 p = float2(cos(a), sin(a)) * detail + float2(pan, 0.0);
+    return StickerGradientNoise(p);
+}
+
+// Signed panned periodic Perlin-style noise remapped from [0, 1] to [-1, 1].
+float StickerPeriodicNoiseSigned(float t, float pan, float period, float detail)
+{
+    return StickerPeriodicNoise(t, pan, period, detail) * 2.0 - 1.0;
+}
+
+// Panned periodic value noise, approximately [0, 1].
+float StickerPeriodicValueNoise(float t, float pan, float period, float detail)
+{
+    float a = 6.28318530718 * (t / period);
+    float2 p = float2(cos(a), sin(a)) * detail + float2(pan, 0.0);
+    return StickerValueNoise(p);
+}
+
+// Signed panned periodic value noise remapped from [0, 1] to [-1, 1].
+float StickerPeriodicValueNoiseSigned(float t, float pan, float period, float detail)
+{
+    return StickerPeriodicValueNoise(t, pan, period, detail) * 2.0 - 1.0;
 }
 
 #endif

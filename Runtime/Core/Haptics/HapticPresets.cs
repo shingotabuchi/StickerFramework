@@ -1,7 +1,7 @@
 namespace StickerFwk.Core.Haptics
 {
     /// <summary>
-    /// Canonical names of the built-in haptic patterns shipped in the framework's default cue sheet.
+    /// Canonical names of the built-in haptic patterns shipped in the framework's default haptic profile.
     /// Use these constants instead of string literals for compile-checked lookups.
     /// </summary>
     public static class HapticPresets

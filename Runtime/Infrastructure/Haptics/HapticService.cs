@@ -17,6 +17,7 @@ namespace StickerFwk.Infrastructure.Haptics
     public sealed class HapticService : IHapticService, IDisposable
     {
         private const string IntensityPrefsKey = "HapticIntensity";
+        private const string ProfileSourceKey = "__profile__";
 
         private readonly IAssetRequester _assetRequester;
         private readonly HapticServiceRoot _root;
@@ -31,15 +32,30 @@ namespace StickerFwk.Infrastructure.Haptics
         private bool _disposed;
 
         public HapticService(IAssetRequester assetRequester, HapticServiceRoot root)
-            : this(assetRequester, root, backendOverride: null)
+            : this(assetRequester, root, profile: null, backendOverride: null)
+        {
+        }
+
+        public HapticService(IAssetRequester assetRequester, HapticServiceRoot root, HapticProfile profile)
+            : this(assetRequester, root, profile, backendOverride: null)
         {
         }
 
         internal HapticService(IAssetRequester assetRequester, HapticServiceRoot root, IHapticBackend backendOverride)
+            : this(assetRequester, root, profile: null, backendOverride)
+        {
+        }
+
+        internal HapticService(
+            IAssetRequester assetRequester,
+            HapticServiceRoot root,
+            HapticProfile profile,
+            IHapticBackend backendOverride)
         {
             _assetRequester = assetRequester ?? throw new ArgumentNullException(nameof(assetRequester));
             _root = root ?? throw new ArgumentNullException(nameof(root));
             _backend = backendOverride ?? SelectBackend();
+            AddPatternsFromProfile(profile);
         }
 
         public float Intensity
@@ -176,6 +192,30 @@ namespace StickerFwk.Infrastructure.Haptics
         {
             _patternsByName[pattern.Name] = pattern;
             _patternSourceKeys[pattern.Name] = "__test__";
+        }
+
+        private void AddPatternsFromProfile(HapticProfile profile)
+        {
+            if (profile?.Patterns == null) return;
+
+            foreach (var pattern in profile.Patterns)
+            {
+                if (string.IsNullOrWhiteSpace(pattern.Name))
+                {
+                    Log.Warning("HapticService", "Ignoring unnamed pattern from haptic profile.");
+                    continue;
+                }
+
+                if (_patternsByName.ContainsKey(pattern.Name))
+                {
+                    Log.Warning("HapticService",
+                        $"Pattern '{pattern.Name}' already registered; ignoring duplicate from haptic profile.");
+                    continue;
+                }
+
+                _patternsByName[pattern.Name] = pattern;
+                _patternSourceKeys[pattern.Name] = ProfileSourceKey;
+            }
         }
 
         private void AddPatternsFromCueSheet(IHapticCueSheet cueSheet, string sourceKey)

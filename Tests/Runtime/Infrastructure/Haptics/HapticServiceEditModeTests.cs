@@ -109,6 +109,18 @@ namespace StickerFwk.Tests.Runtime.Infrastructure.Haptics
             LogAssert.NoUnexpectedReceived();
         }
 
+        [Test]
+        public void Constructor_DefaultProfile_RegistersBuiltInPresetsWithoutCueSheetLoad()
+        {
+            var service = new HapticService(_assetRequester, _root, new DefaultHapticProfile(), _fakeBackend);
+
+            Assert.IsTrue(service.HasPattern(HapticPresets.LightImpact));
+            Assert.IsTrue(service.HasPattern(HapticPresets.HeavyImpact));
+            Assert.AreEqual(0, _assetRequester.RequestCount);
+
+            service.Dispose();
+        }
+
         // -----------------------------------------------------------------------------------------
         // US2 — cue-sheet loading
         // -----------------------------------------------------------------------------------------

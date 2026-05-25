@@ -9,7 +9,7 @@ and gamepad rumble are out of scope.
 | Layer | Namespace | Contents |
 |-------|-----------|----------|
 | Core (consumer-facing) | `StickerFwk.Core.Haptics` | `IHapticService`, `HapticPattern`, `HapticPatternCurve`, `HapticCurvePoint`, `HapticPresetId`, `HapticPresets` |
-| Infrastructure | `StickerFwk.Infrastructure.Haptics` | `HapticService`, `HapticServiceRoot`, `HapticServiceInstaller`, `HapticCueSheet`, `HapticData`, `SerializableHapticCurvePoint` |
+| Infrastructure | `StickerFwk.Infrastructure.Haptics` | `HapticService`, `HapticServiceRoot`, `HapticServiceInstaller`, `HapticProfile`, `DefaultHapticProfile`, `HapticCueSheet`, `HapticData`, `SerializableHapticCurvePoint` |
 | Platform (internal) | `StickerFwk.Infrastructure.Haptics.Platform` | `IHapticBackend`, `NoOpHapticBackend`, `IOSHapticBackend`, `AndroidHapticBackend` |
 
 Feature code depends only on `StickerFwk.Core.Haptics`. Only the game-project
@@ -18,9 +18,9 @@ installer), exactly mirroring `SoundServiceInstaller`.
 
 ## Default preset catalogue
 
-Ships at `DefaultPresets/DefaultHapticCueSheet.asset`, loaded eagerly by
-`HapticServiceInstaller` (Addressable key `stickerfwk/haptics/default`) when
-`_loadDefaultPresetsOnBuild = true` (default). Contents:
+Ships as `DefaultHapticProfile`, a C# profile registered by
+`HapticServiceInstaller` and passed into `HapticService` during container
+construction. Contents:
 
 | Name | Intent | iOS native mapping |
 |------|--------|--------------------|

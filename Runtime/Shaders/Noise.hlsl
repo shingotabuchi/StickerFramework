@@ -156,6 +156,18 @@ float StickerPerlinNoiseSigned(float2 p)
     return StickerGradientNoiseSigned(p);
 }
 
+// Periodic 1D noise with a scrolling second axis.
+// The x coordinate wraps exactly every period, while frequency controls detail.
+float StickerPeriodicNoise(float x, float y, float period, float frequency)
+{
+    float safePeriod = max(abs(period), 0.0001);
+    float safeFrequency = max(abs(frequency), 0.0001);
+    float theta = x / safePeriod * 6.28318530718;
+    float2 periodic = float2(cos(theta), sin(theta)) * safeFrequency;
+
+    return StickerValueNoise(float3(periodic, y));
+}
+
 // Fractal Brownian motion using value noise.
 // octaves: number of noise layers.
 // lacunarity: frequency multiplier per octave, commonly 2.

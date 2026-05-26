@@ -77,17 +77,16 @@ namespace StickerFwk.Core.Editor.AssetTools
                     continue;
                 }
 
-                var existingEntry = settings.FindAssetEntry(guid);
-                if (existingEntry != null)
-                {
-                    Log.Warning($"Already set as Addressable: {assetPath}");
-                    continue;
-                }
-
                 var context = new DuplicatesGroupContext(settings, duplicatesGroupSettings, assetPath);
 
                 schemaSettingsDict[context.Group] = context.SchemaSettings;
                 var entry = settings.CreateOrMoveEntry(guid, context.Group);
+                if (entry == null)
+                {
+                    Log.Warning($"Failed to create Addressable entry for duplicate asset: {assetPath}");
+                    continue;
+                }
+
                 entry.address = context.Address;
 
                 foreach (var label in context.LabelsToApply) entry.SetLabel(label, true, true);

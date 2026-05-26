@@ -7,18 +7,14 @@ namespace StickerFwk.Infrastructure.Rendering
 {
     public sealed class FrostedBlurNoisePass : ScriptableRenderPass
     {
-        private static readonly int FrostedNoiseTypeId = Shader.PropertyToID("_FrostedNoiseType");
         private static readonly int FrostedNoiseStrengthId = Shader.PropertyToID("_FrostedNoiseStrength");
-        private static readonly int FrostedNoiseScaleId = Shader.PropertyToID("_FrostedNoiseScale");
-        private static readonly int FrostedNoiseSeedId = Shader.PropertyToID("_FrostedNoiseSeed");
+        private static readonly int FrostedNoiseTexId = Shader.PropertyToID("_FrostedNoiseTex");
 
         private readonly Material _material;
         private readonly int _passIndex;
 
-        private FrostedBlurNoiseType _noiseType;
         private float _noiseStrength;
-        private float _noiseScale;
-        private float _noiseSeed;
+        private RTHandle _noiseTex;
 
         public FrostedBlurNoisePass(Material material, int passIndex)
         {
@@ -26,12 +22,10 @@ namespace StickerFwk.Infrastructure.Rendering
             _passIndex = passIndex;
         }
 
-        public void Setup(FrostedBlurNoiseType noiseType, float noiseStrength, float noiseScale, float noiseSeed)
+        public void Setup(float noiseStrength, RTHandle noiseTex)
         {
-            _noiseType = noiseType;
             _noiseStrength = noiseStrength;
-            _noiseScale = noiseScale;
-            _noiseSeed = noiseSeed;
+            _noiseTex = noiseTex;
         }
 
         private sealed class CopyPassData
@@ -48,7 +42,7 @@ namespace StickerFwk.Infrastructure.Rendering
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
-            if (_material == null || _noiseType == FrostedBlurNoiseType.None || _noiseStrength <= 0f)
+            if (_material == null || _noiseTex == null || _noiseStrength <= 0f)
             {
                 return;
             }
@@ -61,10 +55,10 @@ namespace StickerFwk.Infrastructure.Rendering
                 return;
             }
 
-            _material.SetInt(FrostedNoiseTypeId, (int)_noiseType);
             _material.SetFloat(FrostedNoiseStrengthId, _noiseStrength);
-            _material.SetFloat(FrostedNoiseScaleId, _noiseScale);
-            _material.SetFloat(FrostedNoiseSeedId, _noiseSeed);
+            _material.SetTexture(FrostedNoiseTexId, _noiseTex.rt);
+
+            var noiseHandle = renderGraph.ImportTexture(_noiseTex);
 
             var desc = renderGraph.GetTextureDesc(cameraColor);
             desc.depthBufferBits = 0;
@@ -93,6 +87,7 @@ namespace StickerFwk.Infrastructure.Rendering
                 passData.passIndex = _passIndex;
 
                 builder.UseTexture(sourceCopy);
+                builder.UseTexture(noiseHandle);
                 builder.SetRenderAttachment(cameraColor, 0);
                 builder.SetRenderFunc(static (CompositePassData data, RasterGraphContext context) =>
                 {

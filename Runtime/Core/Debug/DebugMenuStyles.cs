@@ -1,5 +1,4 @@
 #if STICKER_DEBUG
-using System.Text;
 using UnityEngine;
 
 namespace StickerFwk.Core.Debug
@@ -277,9 +276,17 @@ namespace StickerFwk.Core.Debug
             style.onFocused.textColor = color;
         }
 
+        // Formerly faked a text outline by re-drawing the label in 8 directions (9 GUI.Label draws
+        // per call) and allocating fresh GUIStyle/GUIContent each frame. The outline cost far more in
+        // draw calls than it was worth, so this now renders a single plain label. The TextOutline*
+        // settings are retained on DebugMenuSettings but no longer drawn.
         public void DrawOutlinedLabel(Rect rect, string text, GUIStyle style)
         {
-            DrawOutlinedLabel(rect, new GUIContent(text ?? string.Empty), style);
+            if (style == null)
+            {
+                return;
+            }
+            GUI.Label(rect, text ?? string.Empty, style);
         }
 
         public void DrawOutlinedLabel(Rect rect, GUIContent content, GUIStyle style)
@@ -288,33 +295,7 @@ namespace StickerFwk.Core.Debug
             {
                 return;
             }
-
-            var drawStyle = new GUIStyle(style);
-            var thickness = TextOutlineThickness;
-            if (thickness > 0f)
-            {
-                var outlineStyle = new GUIStyle(drawStyle) { richText = false };
-                ApplyTextColor(outlineStyle, TextOutlineColor);
-                var outlineContent = content.image != null
-                    ? content
-                    : new GUIContent(StripRichText(content.text), content.tooltip);
-                var wholePixels = Mathf.CeilToInt(thickness);
-                for (var i = 1; i <= wholePixels; i++)
-                {
-                    var offset = Mathf.Min(i, thickness);
-                    GUI.Label(new Rect(rect.x - offset, rect.y, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x + offset, rect.y, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x, rect.y - offset, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x, rect.y + offset, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x - offset, rect.y - offset, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x + offset, rect.y - offset, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x - offset, rect.y + offset, rect.width, rect.height), outlineContent, outlineStyle);
-                    GUI.Label(new Rect(rect.x + offset, rect.y + offset, rect.width, rect.height), outlineContent, outlineStyle);
-                }
-            }
-
-            ApplyTextColor(drawStyle, TextColor);
-            GUI.Label(rect, content, drawStyle);
+            GUI.Label(rect, content, style);
         }
 
         private static Texture2D CreateSolidTexture(Color color)
@@ -329,39 +310,6 @@ namespace StickerFwk.Core.Debug
             tex.SetPixel(0, 0, color);
             tex.Apply();
             return tex;
-        }
-
-        private static string StripRichText(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-            {
-                return string.Empty;
-            }
-            if (text.IndexOf('<') < 0)
-            {
-                return text;
-            }
-            var sb = new StringBuilder(text.Length);
-            var inTag = false;
-            for (var i = 0; i < text.Length; i++)
-            {
-                var c = text[i];
-                if (c == '<')
-                {
-                    inTag = true;
-                    continue;
-                }
-                if (c == '>')
-                {
-                    inTag = false;
-                    continue;
-                }
-                if (!inTag)
-                {
-                    sb.Append(c);
-                }
-            }
-            return sb.ToString();
         }
     }
 }

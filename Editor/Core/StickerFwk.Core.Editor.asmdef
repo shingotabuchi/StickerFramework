@@ -5,7 +5,8 @@
         "StickerFwk.Core",
         "Unity.Addressables.Editor",
         "Unity.TextMeshPro",
-        "Unity.TextMeshPro.Editor"
+        "Unity.TextMeshPro.Editor",
+        "UnityEditor.UI"
     ],
     "includePlatforms": [
         "Editor"

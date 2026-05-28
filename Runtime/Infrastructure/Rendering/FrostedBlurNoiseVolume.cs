@@ -9,7 +9,7 @@ namespace StickerFwk.Infrastructure.Rendering
     public sealed class FrostedBlurNoiseVolume : VolumeComponent, IPostProcessComponent
     {
         public FrostedBlurNoiseTypeParameter type = new FrostedBlurNoiseTypeParameter(FrostedBlurNoiseType.None);
-        public NoInterpClampedFloatParameter strength = new NoInterpClampedFloatParameter(0f, 0f, 32f);
+        public ClampedFloatParameter strength = new ClampedFloatParameter(0f, 0f, 32f);
         public NoInterpClampedFloatParameter scale = new NoInterpClampedFloatParameter(80f, 1f, 512f);
         public NoInterpFloatParameter seed = new NoInterpFloatParameter(0f);
 

@@ -19,6 +19,7 @@ namespace StickerFwk.Infrastructure.LocalDataSave
 
         public FileLocalDataSave()
         {
+            EnsureConstructedOnMainThread();
             _saveDirectory = Path.Combine(Application.persistentDataPath, SaveFolderName);
         }
 
@@ -48,7 +49,7 @@ namespace StickerFwk.Infrastructure.LocalDataSave
 
                 Directory.CreateDirectory(_saveDirectory);
                 var path = GetPath(key);
-                var tempPath = path + TempExtension;
+                var tempPath = CreateTempPath(path);
 
                 try
                 {
@@ -85,6 +86,25 @@ namespace StickerFwk.Infrastructure.LocalDataSave
             return Path.Combine(_saveDirectory, key.Value + SaveExtension);
         }
 
+        private static string CreateTempPath(string path)
+        {
+            return path + "." + Guid.NewGuid().ToString("N") + TempExtension;
+        }
+
+        private static string CreateBackupPath(string path)
+        {
+            return path + "." + Guid.NewGuid().ToString("N") + ".bak";
+        }
+
+        private static void EnsureConstructedOnMainThread()
+        {
+            if (Thread.CurrentThread.IsBackground || Thread.CurrentThread.IsThreadPoolThread)
+            {
+                throw new InvalidOperationException(
+                    "FileLocalDataSave must be constructed on the Unity main thread because it reads Application.persistentDataPath.");
+            }
+        }
+
         private static void ValidateKey(LocalDataSaveKey key)
         {
             if (!key.IsValid)
@@ -100,27 +120,54 @@ namespace StickerFwk.Infrastructure.LocalDataSave
 
         private static void ReplaceFile(string tempPath, string path)
         {
-            if (File.Exists(path))
+            if (!File.Exists(path))
             {
-                try
-                {
-                    File.Replace(tempPath, path, null);
-                    return;
-                }
-                catch (IOException)
-                {
-                }
-                catch (PlatformNotSupportedException)
-                {
-                }
+                File.Move(tempPath, path);
+                return;
             }
 
-            if (File.Exists(path))
+            try
             {
-                File.Delete(path);
+                File.Replace(tempPath, path, null);
+                return;
+            }
+            catch (IOException)
+            {
+            }
+            catch (PlatformNotSupportedException)
+            {
             }
 
-            File.Move(tempPath, path);
+            ReplaceFileWithBackup(tempPath, path);
+        }
+
+        private static void ReplaceFileWithBackup(string tempPath, string path)
+        {
+            var backupPath = CreateBackupPath(path);
+            var replaced = false;
+
+            File.Move(path, backupPath);
+            try
+            {
+                File.Move(tempPath, path);
+                replaced = true;
+            }
+            catch
+            {
+                if (!File.Exists(path) && File.Exists(backupPath))
+                {
+                    File.Move(backupPath, path);
+                }
+
+                throw;
+            }
+            finally
+            {
+                if (replaced && File.Exists(backupPath))
+                {
+                    File.Delete(backupPath);
+                }
+            }
         }
     }
 }

@@ -9,6 +9,7 @@
         "R3.Unity",
         "VContainer",
         "MessagePipe",
+        "Unity.Newtonsoft.Json",
         "StickerFwk.Core"
     ],
     "includePlatforms": [],

@@ -94,17 +94,24 @@ namespace StickerFwk.Tests.Editor.LocalDataSave
             var key = CreateKey();
             var service = CreateService();
 
-            await service.SaveAsync(key, new TestSaveData
+            try
             {
-                Name = "saved",
-                Count = 7
-            }, CancellationToken.None);
+                await service.SaveAsync(key, new TestSaveData
+                {
+                    Name = "saved",
+                    Count = 7
+                }, CancellationToken.None);
 
-            await service.DeleteAsync(key, CancellationToken.None);
-            var loaded = await service.LoadAsync<TestSaveData>(key, CancellationToken.None).AsTask();
+                await service.DeleteAsync(key, CancellationToken.None);
+                var loaded = await service.LoadAsync<TestSaveData>(key, CancellationToken.None).AsTask();
 
-            Assert.That(loaded.Name, Is.Null);
-            Assert.That(loaded.Count, Is.EqualTo(0));
+                Assert.That(loaded.Name, Is.Null);
+                Assert.That(loaded.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                await service.DeleteAsync(key, CancellationToken.None);
+            }
         }
 
         [Test]

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using StickerFwk.Core;
 using StickerFwk.Core.LocalDataSave;
 using UnityEngine;
 
@@ -12,6 +13,7 @@ namespace StickerFwk.Infrastructure.LocalDataSave
         private const string SaveFolderName = "Saves";
         private const string SaveExtension = ".json";
         private const string TempExtension = ".tmp";
+        private const string Tag = "LocalDataSave";
 
         private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
 
@@ -165,9 +167,25 @@ namespace StickerFwk.Infrastructure.LocalDataSave
             {
                 if (replaced && File.Exists(backupPath))
                 {
-                    File.Delete(backupPath);
+                    try
+                    {
+                        File.Delete(backupPath);
+                    }
+                    catch (IOException ex)
+                    {
+                        LogBackupDeletionFailure(backupPath, ex);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        LogBackupDeletionFailure(backupPath, ex);
+                    }
                 }
             }
+        }
+
+        private static void LogBackupDeletionFailure(string backupPath, Exception ex)
+        {
+            Log.Warning(Tag, $"Failed to delete local data backup '{backupPath}'. The primary save file is already in place. {ex}");
         }
     }
 }

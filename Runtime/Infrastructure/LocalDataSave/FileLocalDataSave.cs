@@ -156,11 +156,7 @@ namespace StickerFwk.Infrastructure.LocalDataSave
             }
             catch
             {
-                if (!File.Exists(path) && File.Exists(backupPath))
-                {
-                    File.Move(backupPath, path);
-                }
-
+                TryRestoreBackup(backupPath, path);
                 throw;
             }
             finally
@@ -180,6 +176,25 @@ namespace StickerFwk.Infrastructure.LocalDataSave
                         LogBackupDeletionFailure(backupPath, ex);
                     }
                 }
+            }
+        }
+
+        private static void TryRestoreBackup(string backupPath, string path)
+        {
+            if (File.Exists(path) || !File.Exists(backupPath))
+            {
+                return;
+            }
+
+            try
+            {
+                File.Move(backupPath, path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(
+                    Tag,
+                    $"Failed to restore local data backup '{backupPath}' to '{path}'. Save data may be recoverable at the backup path. {ex}");
             }
         }
 

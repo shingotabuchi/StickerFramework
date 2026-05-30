@@ -7,6 +7,13 @@ namespace StickerFwk.Infrastructure.LocalDataSave
 {
     public sealed class JsonLocalDataSaveSerializer : ILocalDataSaveSerializer
     {
+        private readonly JsonSerializerSettings _settings;
+
+        public JsonLocalDataSaveSerializer(JsonSerializerSettings settings = null)
+        {
+            _settings = settings ?? new JsonSerializerSettings();
+        }
+
         public byte[] Serialize<T>(T value) where T : class
         {
             if (value == null)
@@ -14,7 +21,7 @@ namespace StickerFwk.Infrastructure.LocalDataSave
                 throw new ArgumentNullException(nameof(value));
             }
 
-            var json = JsonConvert.SerializeObject(value, Formatting.None);
+            var json = JsonConvert.SerializeObject(value, Formatting.None, _settings);
             return Encoding.UTF8.GetBytes(json);
         }
 
@@ -26,7 +33,7 @@ namespace StickerFwk.Infrastructure.LocalDataSave
             }
 
             var json = Encoding.UTF8.GetString(bytes);
-            return JsonConvert.DeserializeObject<T>(json);
+            return JsonConvert.DeserializeObject<T>(json, _settings);
         }
     }
 }

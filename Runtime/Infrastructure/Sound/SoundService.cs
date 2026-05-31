@@ -169,8 +169,12 @@ namespace StickerFwk.Infrastructure.Sound
             var player = GetOrCreateBgmPlayer(channel);
             var finalVolume = volume * GetVolume(SoundType.BGM);
             _pausedBgmInfo.Remove(channel);
-            await player.CrossfadeBgm(soundData, crossfadeDuration, finalVolume);
             _playingPlayers[SoundType.BGM].Add(player);
+            await player.CrossfadeBgm(soundData, crossfadeDuration, finalVolume);
+            if (!player.IsPlaying)
+            {
+                _playingPlayers[SoundType.BGM].Remove(player);
+            }
         }
 
         public void PlayBgmImmediate(string soundName, int channel = 0, float volume = 1.0f)
@@ -216,8 +220,9 @@ namespace StickerFwk.Infrastructure.Sound
         {
             ThrowIfDisposed();
 
+            var playersToStop = CollectActiveBgmPlayers();
             var tasks = new List<UniTask>();
-            foreach (var player in _playingPlayers[SoundType.BGM])
+            foreach (var player in playersToStop)
             {
                 tasks.Add(player.StopBgm(fadeDuration));
             }
@@ -231,7 +236,7 @@ namespace StickerFwk.Infrastructure.Sound
         {
             ThrowIfDisposed();
 
-            foreach (var player in _playingPlayers[SoundType.BGM])
+            foreach (var player in CollectActiveBgmPlayers())
             {
                 player.StopBgmImmediate();
             }
@@ -430,6 +435,17 @@ namespace StickerFwk.Infrastructure.Sound
         {
             if (_players[SoundType.SE].Count == 0) return CreateNewPlayer(SoundType.SE);
             return _players[SoundType.SE][0];
+        }
+
+        private HashSet<SoundPlayer> CollectActiveBgmPlayers()
+        {
+            var players = new HashSet<SoundPlayer>(_playingPlayers[SoundType.BGM]);
+            foreach (var player in _bgmChannels.Values)
+            {
+                players.Add(player);
+            }
+
+            return players;
         }
 
         private SoundPlayer GetOrCreateBgmPlayer(int channel)

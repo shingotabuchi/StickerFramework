@@ -227,6 +227,18 @@ namespace StickerFwk.Tests.Runtime
                 return Push<T>(tag, options, ct);
             }
 
+            public UniTask<T> PushLocked<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView
+            {
+                return Push<T>(tag, options, ct);
+            }
+
+            public UniTask<T> PushLocked<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView, IWindowWithArgs<TArgs>
+            {
+                return Push<T>(tag, options, ct);
+            }
+
             public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,
                 CancellationToken ct = default) where T : WindowView
             {

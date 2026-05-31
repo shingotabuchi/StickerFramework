@@ -9,6 +9,14 @@ namespace StickerFwk.Core.UI
         UniTask<T> Push<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
         UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
             where T : WindowView, IWindowWithArgs<TArgs>;
+        // Convenience overloads of Push that suppress input for the duration of the push
+        // (asset load + show transition), without the caller having to build a WindowOptions
+        // just to set LockInputDuringPush. Any options passed are honored; the lock flag is
+        // forced on. Requires an IInputLockService to be registered, otherwise the push runs
+        // unlocked with a warning (see UIService).
+        UniTask<T> PushLocked<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default) where T : WindowView;
+        UniTask<T> PushLocked<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>;
         UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
             where T : WindowView;
         UniTask<WindowPushHandle<T>> PushWithHandle<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)

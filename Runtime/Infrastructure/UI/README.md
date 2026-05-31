@@ -81,10 +81,9 @@ If no instance is registered, `UILayerManager` falls back to the framework defau
 
 ## R4: Modal / Input Blocking
 
-- Windows with `IsBlocking = true` place a semi-transparent overlay (`InputBlocker`) behind the window that intercepts raycasts.
-- The blocker is a full-screen `Image` (color `rgba(0, 0, 0, 0.5)`) with `raycastTarget = true`.
+- When a window with `IsBlocking = true` opens, interaction on the previous top window is disabled (`CanvasGroup.interactable = false`). When it closes, interaction is re-enabled.
 - Windows can opt out of blocking by setting `IsBlocking = false` on the `WindowView` inspector or via `WindowOptions` at runtime.
-- When a blocking window opens, interaction on the previous top window is disabled. When it closes, interaction is re-enabled.
+- For input blocking that spans an async push (e.g. while a window loads), set `WindowOptions.LockInputDuringPush` / use `PushLocked`, which acquires an `IInputLockService` lock for the duration of the push. The global `InputBlockerView` overlay (driven by `InputLockChangedEvent`) shields the screen while any lock is held.
 
 ## R5: Transition Animations
 

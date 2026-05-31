@@ -200,11 +200,8 @@ namespace StickerFwk.Tests.Runtime
 
             var view = await service.Push<PlainHandleView>(options: options).AsTask();
             var layerRoot = view.transform.parent;
-            var blocker = layerRoot.Find("InputBlocker");
 
-            Assert.That(blocker, Is.Not.Null);
             Assert.That(layerRoot.gameObject.layer, Is.EqualTo(uiLayer));
-            Assert.That(blocker.gameObject.layer, Is.EqualTo(uiLayer));
             Assert.That(view.gameObject.layer, Is.EqualTo(prefab.layer));
             Assert.That(view.transform.GetChild(0).gameObject.layer, Is.EqualTo(child.layer));
         }
@@ -451,6 +448,12 @@ namespace StickerFwk.Tests.Runtime
                 where T : WindowView => UniTask.FromResult((T)(WindowView)_views.Dequeue());
 
             public UniTask<T> Push<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null,
+                CancellationToken ct = default) where T : WindowView, IWindowWithArgs<TArgs> => Push<T>(tag, options, ct);
+
+            public UniTask<T> PushLocked<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+                where T : WindowView => Push<T>(tag, options, ct);
+
+            public UniTask<T> PushLocked<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null,
                 CancellationToken ct = default) where T : WindowView, IWindowWithArgs<TArgs> => Push<T>(tag, options, ct);
 
             public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,

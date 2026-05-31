@@ -167,6 +167,18 @@ namespace StickerFwk.Infrastructure.UI
             return PushInternal<T>(tag, options, ct, view => view.SetArgs(args));
         }
 
+        public UniTask<T> PushLocked<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView
+        {
+            return Push<T>(tag, WithInputLock(options), ct);
+        }
+
+        public UniTask<T> PushLocked<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            return Push<T, TArgs>(args, tag, WithInputLock(options), ct);
+        }
+
         public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,
             CancellationToken ct = default) where T : WindowView
         {
@@ -511,8 +523,7 @@ namespace StickerFwk.Infrastructure.UI
             var prefabWindow = windowAsset.PrefabWindow;
 
             // IsBlocking and TransitionDuration are plain serialized value-type fields, so the
-            // prefab and instance always agree on them — reading from the prefab here lets us
-            // decide whether to spawn the input blocker before the instance exists. The
+            // prefab and instance always agree on them — reading from the prefab is safe here. The
             // [SerializeReference] transition graphs (ShowTransition / HideTransition) are read
             // from the instance below, after instantiation, because object references inside
             // those graphs are only remapped on the cloned instance.
@@ -522,7 +533,6 @@ namespace StickerFwk.Infrastructure.UI
             var stack = _stacks[layer];
             var enabledLayer = false;
             var disabledPreviousTop = false;
-            GameObject blocker = null;
             GameObject instance = null;
             WindowHandle windowHandle = null;
 
@@ -551,11 +561,6 @@ namespace StickerFwk.Infrastructure.UI
 
                 var layerTransform = _layerManager.GetLayerTransform(layer);
 
-                if (isBlocking)
-                {
-                    blocker = InputBlocker.Create(layerTransform);
-                }
-
                 instance = Object.Instantiate(windowAsset.Prefab, layerTransform);
 
                 // Hide the freshly-instantiated window until the show transition begins.
@@ -567,8 +572,8 @@ namespace StickerFwk.Infrastructure.UI
                 // runs. Authors of custom transitions must do the same.
                 //
                 // Also disable raycasts so the (invisible) prefab can't catch clicks during
-                // the OnInitialize await — the InputBlocker shields lower views, but without
-                // this the new window's own controls would still hit-test.
+                // the OnInitialize await — otherwise the new window's own controls would
+                // hit-test before it has been configured/shown.
                 var preShowCanvasGroup = instance.GetComponent<CanvasGroup>();
                 var originalAlpha = 1f;
                 var originalBlocksRaycasts = false;
@@ -619,7 +624,7 @@ namespace StickerFwk.Infrastructure.UI
                 var showTrans = options?.ShowTransition ?? windowView.ShowTransition;
                 var hideTrans = options?.HideTransition ?? windowView.HideTransition;
 
-                windowHandle = new WindowHandle(key, windowView, blocker, layer, windowAsset.AssetHandle, hideTrans, transDuration);
+                windowHandle = new WindowHandle(key, windowView, layer, windowAsset.AssetHandle, hideTrans, transDuration);
                 stack.Push(windowHandle);
 
                 // Restore raycast/interactable to the prefab-authored values now that init is
@@ -664,11 +669,6 @@ namespace StickerFwk.Infrastructure.UI
                 }
                 else
                 {
-                    if (blocker != null)
-                    {
-                        Object.Destroy(blocker);
-                    }
-
                     if (instance != null)
                     {
                         Object.Destroy(instance);
@@ -899,6 +899,16 @@ namespace StickerFwk.Infrastructure.UI
             }
 
             return _inputLockService.Lock();
+        }
+
+        // Forces LockInputDuringPush on, creating the options object if the caller didn't
+        // supply one. Mutates the passed instance (callers build a fresh WindowOptions per
+        // push), so any other fields the caller set (Inject, transitions, ...) are preserved.
+        static WindowOptions WithInputLock(WindowOptions options)
+        {
+            options ??= new WindowOptions();
+            options.LockInputDuringPush = true;
+            return options;
         }
 
         void ThrowIfDisposed()

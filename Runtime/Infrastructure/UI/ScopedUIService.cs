@@ -58,6 +58,32 @@ namespace StickerFwk.Infrastructure.UI
             return view;
         }
 
+        public async UniTask<T> PushLocked<T>(string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var view = await _inner.PushLocked<T>(tag, options, ct);
+            if (view != null)
+            {
+                _tracked.Add(view);
+            }
+            return view;
+        }
+
+        public async UniTask<T> PushLocked<T, TArgs>(TArgs args, string tag = null, WindowOptions options = null, CancellationToken ct = default)
+            where T : WindowView, IWindowWithArgs<TArgs>
+        {
+            ThrowIfDisposed();
+            PruneDead();
+            var view = await _inner.PushLocked<T, TArgs>(args, tag, options, ct);
+            if (view != null)
+            {
+                _tracked.Add(view);
+            }
+            return view;
+        }
+
         public async UniTask<WindowPushHandle<T>> PushWithHandle<T>(string tag = null, WindowOptions options = null,
             CancellationToken ct = default) where T : WindowView
         {

@@ -101,7 +101,7 @@ Packages/com.stickerfwk.core/
 | `SceneManagement/` | `SceneTransitionService` | Scene loading with transition overlay |
 | `Time/` | `TimeService`, `FeatureTimeService` | Frame time and per-feature time scaling |
 | `Timeline/` | `LoopTrack`, `LoopTrackComponent`, `LoopClipAsset`, `LoopClipBehaviour`, `LoopClipMixerBehaviour` | Custom Timeline looping track |
-| `UI/` | `UIService`, `UILayerManager`, `WindowHandle`, `InputBlocker`, `InputBlockerView`, `ScreenTransitionService` | Full UI service implementation; built-in transitions live in `Core/UI/Transitions/` |
+| `UI/` | `UIService`, `UILayerManager`, `WindowHandle`, `InputBlockerView`, `ScreenTransitionService` | Full UI service implementation; built-in transitions live in `Core/UI/Transitions/` |
 
 ---
 

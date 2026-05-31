@@ -20,6 +20,7 @@ Properties {
 
     _Outline2Color      ("Outline 2 Color", Color) = (0,0,0,1)
     _Outline2Width      ("Outline 2 Thickness", Range(0, 1)) = 0
+    _Outline2Softness   ("Outline 2 Softness", Range(0,1)) = 0
 
     _Bevel              ("Bevel", Range(0,1)) = 0.5
     _BevelOffset        ("Bevel Offset", Range(-0.5,0.5)) = 0
@@ -150,6 +151,7 @@ SubShader {
         // built-in Outline 2 panel: _Outline2Color / _Outline2Width).
         uniform fixed4      _Outline2Color;
         uniform float       _Outline2Width;
+        uniform float       _Outline2Softness;
 
         uniform float       _Bevel;
         uniform float       _BevelOffset;
@@ -229,7 +231,7 @@ SubShader {
         //    outline 1: it only extends the glyph outward and never affects the
         //    outline 1 region.
         fixed4 GetColorTwoOutline(half d, fixed4 faceColor, fixed4 outlineColor, fixed4 outline2Color,
-                                  half outline1, half outline2, half softness)
+                                  half outline1, half outline2, half softness, half softness2)
         {
             // ---- Stock TMP single-outline (outline1 only) ----
             half faceAlpha = 1 - saturate((d - outline1 * 0.5 + softness * 0.5) / (1.0 + softness));
@@ -244,15 +246,15 @@ SubShader {
 
             #if OUTLINE_ON
             // ---- Outline 2: separate band drawn outside outline 1 ----
-            // Band spans d in [outline1*0.5, outline1*0.5 + outline2]. We use a hat-shape
-            // alpha (ramp in on the inner side, ramp out on the outer side using softness)
-            // so the band has natural pixel-wide anti-aliasing on both edges and fades
-            // gracefully when outline2 is sub-pixel. Composited as an underlay so it never
-            // touches the outline 1 region.
+            // Band spans d in [outline1*0.5, outline1*0.5 + outline2]. The inner edge
+            // (o2In, meeting outline 1) keeps a crisp ~1px anti-aliased boundary; only
+            // the OUTER edge (o2Out) is feathered by _Outline2Softness so softness just
+            // softens the silhouette and never eats inward into outline 1. Composited as
+            // an underlay so it never touches the outline 1 region.
             half o2Inner = outline1 * 0.5;
             half o2Outer = outline1 * 0.5 + outline2;
             half o2In  = saturate(d - o2Inner);
-            half o2Out = 1 - saturate((d - o2Outer + softness * 0.5) / (1.0 + softness));
+            half o2Out = 1 - saturate((d - o2Outer + softness2 * 0.5) / (1.0 + softness2));
             half outline2Layer = min(o2In, o2Out);
 
             col.rgb += outline2Color.rgb * outline2Layer * (1 - col.a);
@@ -382,7 +384,11 @@ SubShader {
             outline2Contribution = _Outline2Width;
             #endif
             float totalOutline = (_OutlineWidth + outline2Contribution) * _ScaleRatioA;
-            float alphaClip = (1.0 - totalOutline - _OutlineSoftness * _ScaleRatioA);
+            float outerSoftness = _OutlineSoftness;
+            #if OUTLINE_ON
+            outerSoftness = max(_OutlineSoftness, _Outline2Softness);
+            #endif
+            float alphaClip = (1.0 - totalOutline - outerSoftness * _ScaleRatioA);
 
             #if GLOW_ON
             alphaClip = min(alphaClip, 1.0 - _GlowOffset * _ScaleRatioB - _GlowOuter * _ScaleRatioB);
@@ -450,6 +456,7 @@ SubShader {
             float outline1 = (_OutlineWidth  * _ScaleRatioA) * scale;
             float outline2 = (_Outline2Width * _ScaleRatioA) * scale;
             float softness = (_OutlineSoftness * _ScaleRatioA) * scale;
+            float softness2 = (_Outline2Softness * _ScaleRatioA) * scale;
 
             half4 faceColor = _FaceColor;
             half4 outlineColor = _OutlineColor;
@@ -466,7 +473,7 @@ SubShader {
             faceColor *= tex2D(_FaceTex, input.textures.xy + float2(_FaceUVSpeedX, _FaceUVSpeedY) * _Time.y);
             outlineColor *= tex2D(_OutlineTex, input.textures.zw + float2(_OutlineUVSpeedX, _OutlineUVSpeedY) * _Time.y);
 
-            faceColor = GetColorTwoOutline(sd, faceColor, outlineColor, outline2Color, outline1, outline2, softness);
+            faceColor = GetColorTwoOutline(sd, faceColor, outlineColor, outline2Color, outline1, outline2, softness, softness2);
 
             #if BEVEL_ON
             float3 dxy = float3(0.5 / _TextureWidth, 0.5 / _TextureHeight, 0);
@@ -518,5 +525,5 @@ SubShader {
 }
 
 Fallback "TextMeshPro/Distance Field"
-CustomEditor "TMPro.EditorUtilities.TMP_SDFShaderGUI"
+CustomEditor "StickerFwk.Core.Editor.TMP_SDFTwoOutlinesShaderGUI"
 }

@@ -8,19 +8,27 @@ namespace StickerFwk.Infrastructure.Rendering
     public sealed class DualKawaseBlurFeature : ScriptableRendererFeature
     {
         private const int MaxIterations = 8;
-        private const int NoiseOnlyIterations = 1;
-        private const int NoiseOnlyDownsample = 0;
-        private const float NoiseOnlyOffset = 0f;
         private const float DefaultNoiseScale = 80f;
         private const float DefaultNoiseSeed = 0f;
         private const RenderPassEvent DefaultInjectionPoint = RenderPassEvent.AfterRenderingTransparents;
 
         [SerializeField] private Shader _blurShader;
+        [SerializeField] private Shader _noiseShader;
 
         private Material _material;
+        private Material _noiseMaterial;
         private DualKawaseBlurPass _pass;
+        private FrostedBlurNoisePass _noiseOnlyPass;
+        private FrostedNoiseBakePass _bakePass;
         private CachedBlurBlitPass _cachedBlitPass;
         private RTHandle _cachedBlur;
+        private RTHandle _noiseTex;
+        private int _noiseTexWidth;
+        private int _noiseTexHeight;
+        private FrostedBlurNoiseType _bakedNoiseType = FrostedBlurNoiseType.None;
+        private float _bakedNoiseScale = DefaultNoiseScale;
+        private float _bakedNoiseSeed = DefaultNoiseSeed;
+        private Vector2 _bakedAspect;
         private int _cachedWidth;
         private int _cachedHeight;
         private GraphicsFormat _cachedFormat;
@@ -40,19 +48,49 @@ namespace StickerFwk.Infrastructure.Rendering
                 _blurShader = Shader.Find("Hidden/DualKawaseBlur");
             }
 
-            if (_blurShader == null)
+            if (_noiseShader == null)
+            {
+                _noiseShader = Shader.Find("Hidden/FrostedBlurNoise");
+            }
+
+            if (_blurShader == null && _noiseShader == null)
             {
                 return;
             }
 
-            _material = CoreUtils.CreateEngineMaterial(_blurShader);
-            _pass = new DualKawaseBlurPass(_material, MaxIterations);
+            if (_blurShader != null)
+            {
+                _material = CoreUtils.CreateEngineMaterial(_blurShader);
+                _pass = new DualKawaseBlurPass(_material, MaxIterations);
+            }
+
+            if (_noiseShader != null)
+            {
+                _noiseMaterial = CoreUtils.CreateEngineMaterial(_noiseShader);
+                _noiseOnlyPass = new FrostedBlurNoisePass(_noiseMaterial, 0);
+            }
+            else if (_material != null)
+            {
+                _noiseOnlyPass = new FrostedBlurNoisePass(_material, 2);
+            }
+
+            // Bake the displacement field with the noise material (pass 1) when
+            // available, otherwise fall back to the blur material's bake pass (3).
+            if (_noiseMaterial != null)
+            {
+                _bakePass = new FrostedNoiseBakePass(_noiseMaterial, 1);
+            }
+            else if (_material != null)
+            {
+                _bakePass = new FrostedNoiseBakePass(_material, 3);
+            }
+
             _cachedBlitPass = new CachedBlurBlitPass();
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            if (_pass == null || _material == null)
+            if (_pass == null && _noiseOnlyPass == null)
             {
                 return;
             }
@@ -80,7 +118,33 @@ namespace StickerFwk.Infrastructure.Rendering
             var isManual = blurActive && blur.manualUpdate.value;
             var injectionPoint = blurActive ? blur.injectionPoint.value : DefaultInjectionPoint;
             var cacheVersion = blurActive ? blur.CacheVersion : -1;
-            var desc = renderingData.cameraData.cameraTargetDescriptor;
+
+            var camDesc = renderingData.cameraData.cameraTargetDescriptor;
+
+            if (!blurActive)
+            {
+                if (_noiseOnlyPass == null)
+                {
+                    return;
+                }
+
+                if (!EnsureNoiseBake(renderer, injectionPoint, camDesc.width, camDesc.height, noiseType, noiseScale, noiseSeed))
+                {
+                    return;
+                }
+
+                _noiseOnlyPass.renderPassEvent = injectionPoint;
+                _noiseOnlyPass.Setup(noiseStrength, _noiseTex);
+                renderer.EnqueuePass(_noiseOnlyPass);
+                return;
+            }
+
+            if (_pass == null || _material == null)
+            {
+                return;
+            }
+
+            var desc = camDesc;
 
             var hasCacheMatch = _cacheReady
                 && _cachedBlur != null
@@ -116,18 +180,74 @@ namespace StickerFwk.Infrastructure.Rendering
                 _cachedNoiseSeed = noiseSeed;
             }
 
+            var noiseReady = noiseActive
+                && EnsureNoiseBake(renderer, injectionPoint, desc.width, desc.height, noiseType, noiseScale, noiseSeed);
+
             _pass.renderPassEvent = injectionPoint;
             _pass.Setup(
-                blurActive ? blur.iterations.value : NoiseOnlyIterations,
-                blurActive ? blur.offset.value * blur.intensity.value : NoiseOnlyOffset,
-                blurActive ? blur.downsample.value : NoiseOnlyDownsample,
-                noiseType,
-                noiseStrength,
-                noiseScale,
-                noiseSeed,
+                blur.iterations.value,
+                blur.offset.value * blur.intensity.value,
+                blur.downsample.value,
+                noiseReady ? noiseStrength : 0f,
+                noiseReady ? _noiseTex : null,
                 isManual ? _cachedBlur : null);
 
             renderer.EnqueuePass(_pass);
+        }
+
+        private bool EnsureNoiseBake(ScriptableRenderer renderer, RenderPassEvent injectionPoint,
+            int width, int height, FrostedBlurNoiseType noiseType, float noiseScale, float noiseSeed)
+        {
+            if (_bakePass == null)
+            {
+                return false;
+            }
+
+            var reallocated = EnsureNoiseTexture(width, height);
+            if (_noiseTex == null)
+            {
+                return false;
+            }
+
+            var minDim = Mathf.Min(width, height);
+            var aspect = new Vector2(width / (float)minDim, height / (float)minDim);
+
+            var fresh = !reallocated
+                && _bakedNoiseType == noiseType
+                && Mathf.Approximately(_bakedNoiseScale, noiseScale)
+                && Mathf.Approximately(_bakedNoiseSeed, noiseSeed)
+                && _bakedAspect == aspect;
+
+            if (!fresh)
+            {
+                _bakePass.renderPassEvent = injectionPoint;
+                _bakePass.Setup(_noiseTex, noiseType, noiseScale, noiseSeed, aspect);
+                renderer.EnqueuePass(_bakePass);
+
+                _bakedNoiseType = noiseType;
+                _bakedNoiseScale = noiseScale;
+                _bakedNoiseSeed = noiseSeed;
+                _bakedAspect = aspect;
+            }
+
+            return true;
+        }
+
+        private bool EnsureNoiseTexture(int width, int height)
+        {
+            if (_noiseTex != null && _noiseTexWidth == width && _noiseTexHeight == height)
+            {
+                return false;
+            }
+
+            _noiseTex?.Release();
+            _noiseTex = RTHandles.Alloc(
+                width, height,
+                colorFormat: GraphicsFormat.R8G8_UNorm,
+                name: "_FrostedNoiseTex");
+            _noiseTexWidth = width;
+            _noiseTexHeight = height;
+            return true;
         }
 
         private void EnsureCacheTexture(int width, int height, GraphicsFormat format)
@@ -154,8 +274,21 @@ namespace StickerFwk.Infrastructure.Rendering
                 CoreUtils.Destroy(_material);
             }
 
+            if (_noiseMaterial != null)
+            {
+                CoreUtils.Destroy(_noiseMaterial);
+            }
+
             _cachedBlur?.Release();
             _cachedBlur = null;
+            _noiseTex?.Release();
+            _noiseTex = null;
+            _noiseTexWidth = 0;
+            _noiseTexHeight = 0;
+            _bakedNoiseType = FrostedBlurNoiseType.None;
+            _bakedNoiseScale = DefaultNoiseScale;
+            _bakedNoiseSeed = DefaultNoiseSeed;
+            _bakedAspect = Vector2.zero;
             _cachedCacheVersion = -1;
             _cachedBlurSource = null;
             _cachedNoiseSource = null;

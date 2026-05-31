@@ -8,10 +8,8 @@ namespace StickerFwk.Infrastructure.Rendering
     public sealed class DualKawaseBlurPass : ScriptableRenderPass
     {
         private static readonly int OffsetId = Shader.PropertyToID("_Offset");
-        private static readonly int FrostedNoiseTypeId = Shader.PropertyToID("_FrostedNoiseType");
         private static readonly int FrostedNoiseStrengthId = Shader.PropertyToID("_FrostedNoiseStrength");
-        private static readonly int FrostedNoiseScaleId = Shader.PropertyToID("_FrostedNoiseScale");
-        private static readonly int FrostedNoiseSeedId = Shader.PropertyToID("_FrostedNoiseSeed");
+        private static readonly int FrostedNoiseTexId = Shader.PropertyToID("_FrostedNoiseTex");
         private static readonly string[] DownTextureNames =
         {
             "_BlurDown0",
@@ -67,10 +65,8 @@ namespace StickerFwk.Infrastructure.Rendering
         private int _iterations;
         private float _offset;
         private int _downsample;
-        private FrostedBlurNoiseType _noiseType;
         private float _noiseStrength;
-        private float _noiseScale;
-        private float _noiseSeed;
+        private RTHandle _noiseTex;
         private RTHandle _cacheTarget;
 
         public DualKawaseBlurPass(Material material, int maxIterations)
@@ -81,16 +77,14 @@ namespace StickerFwk.Infrastructure.Rendering
         }
 
         public void Setup(int iterations, float offset, int downsample,
-            FrostedBlurNoiseType noiseType, float noiseStrength, float noiseScale, float noiseSeed,
+            float noiseStrength, RTHandle noiseTex,
             RTHandle cacheTarget = null)
         {
             _iterations = Mathf.Min(iterations, _maxIterations);
             _offset = offset;
             _downsample = downsample;
-            _noiseType = noiseType;
             _noiseStrength = noiseStrength;
-            _noiseScale = noiseScale;
-            _noiseSeed = noiseSeed;
+            _noiseTex = noiseTex;
             _cacheTarget = cacheTarget;
         }
 
@@ -117,10 +111,14 @@ namespace StickerFwk.Infrastructure.Rendering
             }
 
             _material.SetFloat(OffsetId, _offset);
-            _material.SetInt(FrostedNoiseTypeId, (int)_noiseType);
             _material.SetFloat(FrostedNoiseStrengthId, _noiseStrength);
-            _material.SetFloat(FrostedNoiseScaleId, _noiseScale);
-            _material.SetFloat(FrostedNoiseSeedId, _noiseSeed);
+
+            var noiseHandle = TextureHandle.nullHandle;
+            if (_noiseTex != null)
+            {
+                _material.SetTexture(FrostedNoiseTexId, _noiseTex.rt);
+                noiseHandle = renderGraph.ImportTexture(_noiseTex);
+            }
 
             var baseDesc = renderGraph.GetTextureDesc(cameraColor);
             baseDesc.depthBufferBits = 0;
@@ -163,17 +161,17 @@ namespace StickerFwk.Infrastructure.Rendering
                 lastUp = upTexture;
             }
 
-            AddBlitPass(renderGraph, lastUp, cameraColor, _material, 2, "KawaseBlurFinal");
+            AddBlitPass(renderGraph, lastUp, cameraColor, _material, 2, "KawaseBlurFinal", noiseHandle);
 
             if (_cacheTarget != null)
             {
                 var cacheTexture = renderGraph.ImportTexture(_cacheTarget);
-                AddBlitPass(renderGraph, lastUp, cacheTexture, _material, 2, "KawaseBlurCache");
+                AddBlitPass(renderGraph, lastUp, cacheTexture, _material, 2, "KawaseBlurCache", noiseHandle);
             }
         }
 
         private static void AddBlitPass(RenderGraph renderGraph, TextureHandle source, TextureHandle destination,
-            Material material, int passIndex, string passName)
+            Material material, int passIndex, string passName, TextureHandle extraRead = default)
         {
             using (var builder = renderGraph.AddRasterRenderPass<PassData>(passName, out var passData))
             {
@@ -182,6 +180,10 @@ namespace StickerFwk.Infrastructure.Rendering
                 passData.passIndex = passIndex;
 
                 builder.UseTexture(source);
+                if (extraRead.IsValid())
+                {
+                    builder.UseTexture(extraRead);
+                }
                 builder.SetRenderAttachment(destination, 0);
 
                 builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>

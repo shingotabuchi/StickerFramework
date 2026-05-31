@@ -1,12 +1,10 @@
 {
-    "name": "StickerFwk.Core.Editor",
-    "rootNamespace": "StickerFwk.Core.Editor",
+    "name": "StickerFwk.Tests.Editor",
+    "rootNamespace": "StickerFwk.Tests.Editor",
     "references": [
         "StickerFwk.Core",
-        "Unity.Addressables.Editor",
-        "Unity.TextMeshPro",
-        "Unity.TextMeshPro.Editor",
-        "UnityEditor.UI"
+        "StickerFwk.Infrastructure",
+        "UniTask"
     ],
     "includePlatforms": [
         "Editor"
@@ -18,5 +16,8 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
 }

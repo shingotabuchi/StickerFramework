@@ -154,7 +154,9 @@ namespace StickerFwk.Tests.Runtime.Infrastructure.Haptics
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            Assert.ThrowsAsync<OperationCanceledException>(
+            // .AsTask() surfaces cancellation as TaskCanceledException (a subclass of
+            // OperationCanceledException), so use CatchAsync which matches derived types.
+            Assert.CatchAsync<OperationCanceledException>(
                 async () => await _service.LoadCueSheetAsync("a", cts.Token).AsTask());
             Assert.IsFalse(_service.IsCueSheetLoaded("a"));
 

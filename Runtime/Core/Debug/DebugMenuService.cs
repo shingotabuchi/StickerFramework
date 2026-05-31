@@ -220,11 +220,12 @@ namespace StickerFwk.Core.Debug
                 return;
             }
 
-            if (GUI.Button(rect, GUIContent.none, _styles.ToggleButton))
+            // No outlined label here: the toggle sits on an opaque button background, so the
+            // 8-direction outline (9 GUI.Label draws) is wasted. Render the text in the button itself.
+            if (GUI.Button(rect, _settings.ButtonText, _styles.ToggleButton))
             {
                 Open();
             }
-            _styles.DrawOutlinedLabel(rect, _settings.ButtonText, _styles.ToggleButton);
         }
 
         private void DrawPanel(float scale)

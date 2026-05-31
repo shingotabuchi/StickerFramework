@@ -89,6 +89,42 @@ namespace StickerFwk.Tests.Editor.LocalDataSave
         }
 
         [Test]
+        public async Task ExistsAsyncReturnsFalseWhenMissing()
+        {
+            var key = CreateKey();
+            var service = CreateService();
+
+            await service.DeleteAsync(key, CancellationToken.None);
+            var exists = await service.ExistsAsync(key, CancellationToken.None).AsTask();
+
+            Assert.That(exists, Is.False);
+        }
+
+        [Test]
+        public async Task ExistsAsyncReturnsTrueAfterSave()
+        {
+            var key = CreateKey();
+            var service = CreateService();
+
+            try
+            {
+                await service.SaveAsync(key, new TestSaveData
+                {
+                    Name = "saved",
+                    Count = 1
+                }, CancellationToken.None);
+
+                var exists = await service.ExistsAsync(key, CancellationToken.None).AsTask();
+
+                Assert.That(exists, Is.True);
+            }
+            finally
+            {
+                await service.DeleteAsync(key, CancellationToken.None);
+            }
+        }
+
+        [Test]
         public async Task DeleteRemovesSavedData()
         {
             var key = CreateKey();

@@ -62,5 +62,11 @@ namespace StickerFwk.Infrastructure.LocalDataSave
         {
             return _localDataSave.DeleteAsync(key, ct);
         }
+
+        public async UniTask<bool> ExistsAsync(LocalDataSaveKey key, CancellationToken ct)
+        {
+            var bytes = await _localDataSave.ReadAsync(key, ct);
+            return bytes != null && bytes.Length > 0;
+        }
     }
 }

@@ -12,5 +12,8 @@ namespace StickerFwk.Core.LocalDataSave
             where T : class, new();
 
         UniTask DeleteAsync(LocalDataSaveKey key, CancellationToken ct);
+
+        /// <summary>Returns whether saved data exists for the given key.</summary>
+        UniTask<bool> ExistsAsync(LocalDataSaveKey key, CancellationToken ct);
     }
 }

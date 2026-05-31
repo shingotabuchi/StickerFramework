@@ -9,9 +9,9 @@ namespace StickerFwk.Infrastructure.LocalDataSave
     {
         private readonly JsonSerializerSettings _settings;
 
-        public JsonLocalDataSaveSerializer(JsonSerializerSettings settings = null)
+        public JsonLocalDataSaveSerializer()
         {
-            _settings = settings ?? new JsonSerializerSettings();
+            _settings = new JsonSerializerSettings();
         }
 
         public byte[] Serialize<T>(T value) where T : class

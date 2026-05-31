@@ -4,7 +4,8 @@
     "references": [
         "StickerFwk.Core",
         "StickerFwk.Infrastructure",
-        "UniTask"
+        "UniTask",
+        "Unity.Newtonsoft.Json"
     ],
     "includePlatforms": [
         "Editor"
